@@ -67,10 +67,12 @@ before(async () => {
     }
     if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
     if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true });
-    if (url.pathname === "/api/mcp/replay" && url.searchParams.get("mine") === "1") {
+    if (url.pathname === "/api/mcp/replay" && url.searchParams.get("search") === "1") {
       state.lastListQuery = url.search;
+      const other = url.searchParams.get("player") && url.searchParams.get("player") !== "me";
       return json(200, {
         profile: { name: "Alice", region: "na" },
+        player: other ? { name: url.searchParams.get("player"), region: null, me: false } : { name: "Alice", region: "na", me: true },
         replays: [{ ...summary(), playedAt: "2026-09-20T10:00:00Z", relations: ["played", "coached"], you: { name: "Alice", race: "Protoss", result: "Win" } }],
       });
     }
@@ -117,7 +119,7 @@ test("initialize advertises tools and instructions", () => {
 
 test("tools/list: every tool has an object schema and annotations", async () => {
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 10);
+  assert.equal(tools.length, 11);
   for (const t of tools) {
     assert.equal(t.inputSchema.type, "object", t.name);
     assert.ok(t.annotations, t.name);
@@ -193,12 +195,36 @@ test("list_my_replays shows each game's links, the user's result and the filter"
   const r = await client.callTool({ name: "list_my_replays", arguments: { filter: "coached", limit: 5 } });
   assert.ok(!r.isError, r.content[0].text);
   const t = r.content[0].text;
-  assert.match(t, /Games for Alice \(NA\)/);
+  assert.match(t, /game for Alice \(NA\)/);
   assert.match(t, new RegExp(REPLAY));
   assert.match(t, /you: Alice \(Win\)/);
   assert.match(t, /you played, you ran the coach/);
-  assert.match(state.lastListQuery, /filter=coached/);
+  assert.match(state.lastListQuery, /has_report=1/);
   assert.equal(r.structuredContent.replays[0].relations.length, 2);
+});
+
+test("search_replays passes every filter to the site and defaults to the signed-in user", async () => {
+  const r = await client.callTool({
+    name: "search_replays",
+    arguments: { from: "2026-06", to: "2026-06-30", map: "Rainfall", opponent: "Bob", opponent_race: "Zerg", result: "loss", has_report: true, limit: 5 },
+  });
+  assert.ok(!r.isError, r.content[0].text);
+  const q = new URLSearchParams(state.lastListQuery);
+  assert.equal(q.get("search"), "1");
+  assert.equal(q.get("player"), null, "no player = the signed-in user");
+  for (const [k, v] of Object.entries({ from: "2026-06", to: "2026-06-30", map: "Rainfall", opponent: "Bob", opponent_race: "Zerg", result: "loss", has_report: "1", limit: "5" })) {
+    assert.equal(q.get(k), v, k);
+  }
+  assert.match(r.content[0].text, /1 game for Alice \(NA\) matching/);
+  assert.match(r.content[0].text, /you: Alice \(Win\)/);
+
+  const other = await client.callTool({ name: "search_replays", arguments: { player: "Serral", opponent_race: "Terran" } });
+  assert.equal(new URLSearchParams(state.lastListQuery).get("player"), "Serral");
+  assert.match(other.content[0].text, /for Serral/);
+  assert.doesNotMatch(other.content[0].text, /you ran the coach/, "someone else's games aren't tagged as the user's");
+
+  const bad = await client.callTool({ name: "search_replays", arguments: { result: "draw" } });
+  assert.ok(bad.isError, "schema rejects unknown result");
 });
 
 test("confirmed run streams progress and returns the report", async () => {

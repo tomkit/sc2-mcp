@@ -83,6 +83,7 @@ You can also set `SC2_API_TOKEN` in the server's environment; it takes precedenc
 | `search_sc2_knowledge` | Passages from the SC2 knowledge base for general questions |
 | `upload_replay` | Upload a `.SC2Replay` (or Brood War `.rep`) by `path` or `url` |
 | `list_my_replays` | Your games, newest first: ones you played (via your linked SC2 profile), coached, asked about or uploaded, with your result and whether a report exists |
+| `search_replays` | Search your games (or another player's, by name) by date range, map, opponent, your race, opponent's race, win/loss, 1v1/2v2 and whether a report exists |
 | `get_analysis` | A replay's details and its AI Coach report, if one exists |
 | `analyze_replay` | Run the AI Coach (1 mineral, needs `confirm_spend`) |
 | `ask_about_replay` | Ask the coach a follow-up question about a coached replay |

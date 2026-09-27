@@ -23,6 +23,7 @@ Before calling `analyze_replay` or `unlock_more_questions` with `confirm_spend: 
   - Windows: `Documents\StarCraft II\Accounts\<id>\<id>\Replays\Multiplayer`
   - macOS: `~/Library/Application Support/Blizzard/StarCraft II/Accounts/<id>/<id>/Replays/Multiplayer`
   Pick the newest `.SC2Replay`, `upload_replay` it, then `get_analysis`. If there's no report, offer `analyze_replay` (1 mineral).
-- **Follow-ups on an older game**: `list_my_replays` with `filter: "coached"`, then `ask_about_replay` with that replay id.
+- **Finding a particular game** ("my losses on Rainfall last month", "my PvZ games since June", "that game against Bob"): `search_replays`. It searches the user's own games by default; convert relative dates to `from`/`to` (YYYY-MM or YYYY-MM-DD) and "PvZ" to `race: Protoss, opponent_race: Zerg`. Set `player` to someone else's name to search their public games.
+- **Follow-ups on an older game**: `search_replays` with `has_report: true` (or `list_my_replays` with `filter: "coached"`), then `ask_about_replay` with that replay id.
 - **Long runs**: a coach run takes 3–7 minutes. If `analyze_replay` returns "still analyzing", call `get_analysis` with the same replay to wait for it. Don't start it again.
 - **Follow-ups**: `ask_about_replay` with the user's question in their words. When questions run out, offer `unlock_more_questions`.

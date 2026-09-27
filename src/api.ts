@@ -112,6 +112,8 @@ export interface MyReplay extends ReplaySummary {
   relations: ReplayRelation[];
   /** The user's own slot, when their claimed profile played in it. */
   you: { name: string | null; race: string | null; result: string | null } | null;
+  /** The searched player's slot (the user, or the player searched for). */
+  player?: { name: string | null; race: string | null; result: string | null } | null;
 }
 
 export interface AiAnalysis {

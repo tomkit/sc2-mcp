@@ -164,15 +164,14 @@ const RELATION_LABEL: Record<ReplayRelation, string> = {
   uploaded: "you uploaded",
 };
 
-function replayLine(r: MyReplay): string {
+function replayLine(r: MyReplay, me = true): string {
   const players = r.players.map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}`).join(" vs ");
   const when = (r.playedAt ?? "").slice(0, 10);
-  const you = r.you ? ` · you: ${r.you.name}${r.you.result ? ` (${r.you.result})` : ""}` : "";
+  const slot = r.player ?? r.you;
+  const who = slot ? ` · ${me ? "you" : "player"}: ${slot.name}${slot.result ? ` (${slot.result})` : ""}` : "";
   const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
-  return (
-    `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${you}` +
-    ` · ${report} · ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}`
-  );
+  const links = me && r.relations.length ? ` · ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}` : "";
+  return `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${who} · ${report}${links}`;
 }
 
 function runStatusText(run: CoachRun, r: ReplaySummary): string {
@@ -262,8 +261,9 @@ export function createServer(): McpServer {
         "Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions " +
         "about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless " +
         "`confirm_spend` is true — ask the user first and only set it after they agree. When the user mentions one of their " +
-        "games ('my last game'), call `list_my_replays` first: games they played, coached or uploaded before are already " +
-        "there, and an existing report is free to re-read. Knowledge search, uploads and " +
+        "games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on " +
+        "Rainfall in June') use `search_replays`. Games they played, coached or uploaded before are already there, and an " +
+        "existing report is free to re-read. Knowledge search, uploads and " +
         "reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer " +
         "from the passages it returns, citing their URLs.",
     },
@@ -441,16 +441,50 @@ export function createServer(): McpServer {
     }),
   );
 
+  /** One call to the site's search, formatted; shared by both listing tools. */
+  async function runSearch(params: Record<string, string | number | boolean | undefined>, emptyHint: string) {
+    const qs = new URLSearchParams({ search: "1" });
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === "" || v === false) continue;
+      qs.set(k, v === true ? "1" : String(v));
+    }
+    const { replays, profile, player } = await getJson<{
+      replays: MyReplay[];
+      profile: { name: string; region: string } | null;
+      player: { name: string; region: string | null; me: boolean } | null;
+    }>(`/api/mcp/replay?${qs}`);
+    const me = !params.player || String(params.player).toLowerCase() === "me";
+    const claimHint =
+      me && !profile
+        ? "\n\nNo SC2 profile is linked to this account, so games the user played but never coached, asked about or " +
+          `uploaded aren't included. They can link it under "Set your profile" in the account menu at ${apiBase()}.`
+        : "";
+    const filters = Object.entries(params)
+      .filter(([k, v]) => v !== undefined && v !== "" && v !== false && k !== "limit" && k !== "player")
+      .map(([k, v]) => (v === true ? k : `${k}=${v}`))
+      .join(", ");
+    const who = me ? (profile ? `${profile.name} (${profile.region.toUpperCase()})` : "this account") : `${player?.name ?? params.player}`;
+    if (replays.length === 0) {
+      return text(`No games found for ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player });
+    }
+    const head = `${replays.length} game${replays.length === 1 ? "" : "s"} for ${who}${filters ? ` matching ${filters}` : ""}, newest first:`;
+    return text(`${head}\n${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
+      replays: replays as unknown as Record<string, unknown>[],
+      profile,
+      player,
+    } as Record<string, unknown>);
+  }
+
   server.registerTool(
     "list_my_replays",
     {
       title: "List my games",
       description:
-        "The signed-in user's games on StarCraft2.ai, newest first: games they played (matched by their claimed SC2 profile), " +
-        "ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, and whether an " +
-        "AI Coach report exists. CALL THIS FIRST when the user refers to 'my last game', 'my latest replay', 'that game I " +
-        "lost on <map>' or any game of theirs — an existing report is free to re-read with get_analysis, so there's no need " +
-        "to find or upload a file. filter 'coached' lists only games with a report. Free.",
+        "The signed-in user's most recent games on StarCraft2.ai, newest first: games they played (matched by their claimed " +
+        "SC2 profile), ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, " +
+        "and whether an AI Coach report exists. CALL THIS FIRST when the user says 'my last game' or 'my latest replay' — an " +
+        "existing report is free to re-read with get_analysis. To narrow by date, map, opponent, race or result, use " +
+        "search_replays instead. Free.",
       inputSchema: {
         limit: z.number().int().min(1).max(50).optional().describe("How many (default 10)."),
         filter: z
@@ -460,27 +494,47 @@ export function createServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    guarded(async ({ limit, filter }: { limit?: number; filter?: "all" | "coached" | "played" }) => {
-      const { replays, profile } = await getJson<{ replays: MyReplay[]; profile: { name: string; region: string } | null }>(
-        `/api/mcp/replay?mine=1&limit=${limit ?? 10}&filter=${filter ?? "all"}`,
-      );
-      const claimHint = profile
-        ? ""
-        : "\n\nNo SC2 profile is linked to this account, so games the user played but never coached, asked about or uploaded " +
-          `aren't listed. They can link it under "Set your profile" in the account menu at ${apiBase()}.`;
-      if (replays.length === 0) {
-        const none =
-          filter === "coached"
-            ? "None of the user's games has an AI Coach report yet."
-            : "No games found for this account yet. Upload a replay with upload_replay.";
-        return text(none + claimHint, { replays: [], profile });
-      }
-      const head = profile ? `Games for ${profile.name} (${profile.region.toUpperCase()}), newest first:` : "Games, newest first:";
-      return text(`${head}\n${replays.map(replayLine).join("\n")}${claimHint}`, {
-        replays: replays as unknown as Record<string, unknown>[],
-        profile,
-      } as Record<string, unknown>);
-    }),
+    guarded(async ({ limit, filter }: { limit?: number; filter?: "all" | "coached" | "played" }) =>
+      runSearch(
+        { limit: limit ?? 10, has_report: filter === "coached", played_only: filter === "played" },
+        filter === "coached" ? "None of them has an AI Coach report yet." : "Upload a replay with upload_replay.",
+      ),
+    ),
+  );
+
+  server.registerTool(
+    "search_replays",
+    {
+      title: "Search games",
+      description:
+        "Search StarCraft II games on StarCraft2.ai. By default searches the SIGNED-IN USER's games (played via their claimed " +
+        "SC2 profile, coached, asked about or uploaded) — use it for requests like 'my losses on Rainfall last month', 'my PvZ " +
+        "games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to " +
+        "search their public games instead. Every filter is optional and applied before the limit, so results cover all " +
+        "matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
+      inputSchema: {
+        player: z
+          .string()
+          .max(80)
+          .optional()
+          .describe("'me' (default) for the signed-in user, or another player's exact in-game name (case-insensitive)."),
+        region: z.enum(["na", "eu", "kr", "cn"]).optional().describe("With player: only that player's games on this server."),
+        from: z.string().optional().describe("Played on or after: YYYY-MM or YYYY-MM-DD. Convert 'last month' etc. to dates yourself."),
+        to: z.string().optional().describe("Played on or before (inclusive): YYYY-MM or YYYY-MM-DD."),
+        map: z.string().max(80).optional().describe("Map name or part of it, e.g. 'Rainfall'."),
+        opponent: z.string().max(80).optional().describe("Part of an opponent's name (players on the other team)."),
+        race: z.enum(["Terran", "Protoss", "Zerg"]).optional().describe("The searched player's race."),
+        opponent_race: z.enum(["Terran", "Protoss", "Zerg"]).optional().describe("An opponent's race, e.g. Zerg for 'vs Zerg' / 'PvZ'."),
+        result: z.enum(["win", "loss"]).optional().describe("The searched player's result."),
+        game_type: z.string().regex(/^\d+v\d+$/).optional().describe("e.g. '1v1', '2v2'."),
+        has_report: z.boolean().optional().describe("Only games that already have an AI Coach report (free to re-read)."),
+        limit: z.number().int().min(1).max(50).optional().describe("How many (default 10)."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    guarded(async (args: Record<string, string | number | boolean | undefined>) =>
+      runSearch({ ...args, limit: (args.limit as number | undefined) ?? 10 }, "Try fewer filters or a wider date range."),
+    ),
   );
 
   const replayArg = z
