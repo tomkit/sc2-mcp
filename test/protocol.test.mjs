@@ -13,7 +13,7 @@ import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const TOKEN = "sc2_test_token";
 const REPLAY = "11111111-2222-3333-4444-555555555555";
-const state = { minerals: 3, analyzeCalls: 0, analysis: null, unauthorized: 0, devicePolls: 0, deviceApproved: false };
+const state = { minerals: 3, analyzeCalls: 0, analysis: null, unauthorized: 0, devicePolls: 0, deviceApproved: false, canSpend: true };
 
 const ANALYSIS = {
   overallAssessment: "A close {Alice|p:Alice} win over {p:Bob}.",
@@ -66,7 +66,7 @@ before(async () => {
       return;
     }
     if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
-    if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true });
+    if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true, tokenCanSpend: state.canSpend });
     if (url.pathname === "/api/mcp/replay" && url.searchParams.get("search") === "1") {
       state.lastListQuery = url.search;
       const other = url.searchParams.get("player") && url.searchParams.get("player") !== "me";
@@ -225,6 +225,21 @@ test("search_replays passes every filter to the site and defaults to the signed-
 
   const bad = await client.callTool({ name: "search_replays", arguments: { result: "draw" } });
   assert.ok(bad.isError, "schema rejects unknown result");
+});
+
+test("with spending off for this connection, paid tools refuse before asking and point to the website", async () => {
+  state.canSpend = false;
+  try {
+    const r = await client.callTool({ name: "analyze_replay", arguments: { replay: REPLAY, confirm_spend: true } });
+    assert.ok(r.isError);
+    assert.match(r.content[0].text, /turned off for this connection/);
+    assert.match(r.content[0].text, /\/auth\/mcp/);
+    assert.equal(state.analyzeCalls, 0);
+    const acct = await client.callTool({ name: "get_account", arguments: {} });
+    assert.match(acct.content[0].text, /Spending from this connection: OFF/);
+  } finally {
+    state.canSpend = true;
+  }
 });
 
 test("confirmed run streams progress and returns the report", async () => {

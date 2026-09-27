@@ -70,6 +70,13 @@ function billingUrl(): string {
   return `${apiBase()}/en/billing`;
 }
 
+function spendOffText(): string {
+  return (
+    `Spending minerals is turned off for this connection, so nothing was charged. The user can turn it on at ` +
+    `${apiBase()}/auth/mcp (Connected apps → Allow spending), then ask again.`
+  );
+}
+
 /** Tool errors become readable tool results (isError), never protocol errors. */
 function describeError(e: unknown): CallToolResult {
   if (e instanceof NotSignedInError) return fail(e.message);
@@ -77,6 +84,7 @@ function describeError(e: unknown): CallToolResult {
     if (e.status === 402 && e.code === "NO_BALANCE") {
       return fail(`${e.message}\nThe user can buy minerals at ${billingUrl()}.`);
     }
+    if (e.status === 403 && e.code === "SPEND_NOT_ALLOWED") return fail(spendOffText());
     if (e.status === 429) return fail(`${e.message} (rate limited)`);
     return fail(`${e.message}${e.code ? ` [${e.code}]` : ""}`);
   }
@@ -359,8 +367,20 @@ export function createServer(): McpServer {
       const me = await getJson<Me>("/api/me");
       const profile = me.profileName ? `${me.profileName} (${me.profileRegion ?? "?"})` : "none claimed";
       return text(
-        `Minerals: ${me.minerals}\nSC2 profile: ${profile}\nPrices: AI Coach report 1 mineral; follow-up questions 3 free per replay, then 1 mineral per 20.\nBuy minerals: ${billingUrl()}`,
-        { minerals: me.minerals, profileName: me.profileName, profileRegion: me.profileRegion, billingUrl: billingUrl() },
+        `Minerals: ${me.minerals}\nSC2 profile: ${profile}\n` +
+          (me.tokenCanSpend === false
+            ? `Spending from this connection: OFF (turn it on at ${apiBase()}/auth/mcp → Connected apps)\n`
+            : me.tokenCanSpend === true
+              ? "Spending from this connection: allowed\n"
+              : "") +
+          `Prices: AI Coach report 1 mineral; follow-up questions 3 free per replay, then 1 mineral per 20.\nBuy minerals: ${billingUrl()}`,
+        {
+          minerals: me.minerals,
+          canSpend: me.tokenCanSpend ?? null,
+          profileName: me.profileName,
+          profileRegion: me.profileRegion,
+          billingUrl: billingUrl(),
+        },
       );
     }),
   );
@@ -621,6 +641,7 @@ export function createServer(): McpServer {
             run = startRun(summary.id, { language: language ?? summary.analysisLanguage ?? "en", regenerate: true });
           } else {
             const me = await getJson<Me>("/api/me");
+            if (me.tokenCanSpend === false) return fail(spendOffText());
             if (me.minerals < COACH_PRICE) {
               return fail(`Running the AI Coach costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
             }
@@ -719,6 +740,7 @@ export function createServer(): McpServer {
         });
       }
       const me = await getJson<Me>("/api/me");
+      if (me.tokenCanSpend === false) return fail(spendOffText());
       if (me.minerals < 1) return fail(`The balance is 0 minerals. The user can buy minerals at ${billingUrl()}.`);
       const gate = await confirmSpend(server, confirm_spend, `Spend 1 mineral for 20 more questions on ${summary.map ?? "this replay"}? Your balance is ${me.minerals}.`);
       if (gate === "declined") return text("Not purchased: the user declined the spend.", { status: "declined" });

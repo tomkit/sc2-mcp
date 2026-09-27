@@ -15,7 +15,7 @@ You need a StarCraft2.ai account. The tools use your account's **minerals**, at 
 | AI Coach report on a replay | 1 mineral (free if the replay already has one) |
 | Follow-up questions on a replay | first 3 free, then 1 mineral per 20 |
 
-A tool never spends minerals unless it's called with `confirm_spend: true`, and the tool descriptions tell the assistant to ask you first. If your client supports MCP elicitation, the server also asks you directly before spending, so nothing the assistant reads in a replay or a report can approve a purchase for you. Buy minerals at [starcraft2.ai/en/billing](https://www.starcraft2.ai/en/billing).
+**A new connection can't spend minerals at all until you allow it** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp) under Connected apps, so a sign-in someone tricked you into approving can read but not spend. Once allowed, a tool still never spends unless it's called with `confirm_spend: true`, and the tool descriptions tell the assistant to ask you first. If your client supports MCP elicitation, the server also asks you directly before spending, so nothing the assistant reads in a replay or a report can approve a purchase for you. Buy minerals at [starcraft2.ai/en/billing](https://www.starcraft2.ai/en/billing).
 
 ## Install
 
@@ -70,7 +70,7 @@ Every tool except `login` needs you signed in. `login` gives you two ways to app
 - **On the same computer:** it opens StarCraft2.ai in your browser. Sign in if you aren't already, check the request and click **Allow**. That's the OAuth 2.1 authorization-code flow with PKCE and a loopback redirect to `127.0.0.1` ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)).
 - **From your phone or any other device:** it also gives you a short code like `BCDF-GHJK`. Open [starcraft2.ai/auth/device](https://www.starcraft2.ai/auth/device), enter the code and approve. That's the device authorization grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)): nothing is redirected to your computer, so it works when the server runs on a Mac you're not sitting at, over SSH, or in a container. Only enter a code that your own assistant gave you, and never one someone sent you.
 
-The server never sees your password. The resulting token is saved to `~/.config/sc2-mcp/credentials.json` (`%APPDATA%\sc2-mcp` on Windows) with owner-only permissions. It lasts 180 days. `logout` revokes it, and so does **Disconnect** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp), which lists every connected device.
+The server never sees your password. The resulting token is saved to `~/.config/sc2-mcp/credentials.json` (`%APPDATA%\sc2-mcp` on Windows) with owner-only permissions. It lasts 180 days for a browser sign-in and 30 days for a code sign-in, and you get an email each time an app connects. `logout` revokes it, and so does **Disconnect** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp), which lists every connected device.
 
 You can also set `SC2_API_TOKEN` in the server's environment; it takes precedence over the saved token, which follows the MCP spec's advice for stdio servers to take credentials from the environment. Treat a token like a password: it can spend your minerals.
 

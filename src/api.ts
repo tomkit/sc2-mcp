@@ -82,6 +82,8 @@ export interface Me {
   profileName: string | null;
   profileRegion: string | null;
   emailVerified: boolean;
+  /** Whether the owner has let this connection spend minerals (null on old sites). */
+  tokenCanSpend?: boolean | null;
 }
 
 export interface ReplaySummary {

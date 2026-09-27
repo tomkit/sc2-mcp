@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.4.0";
+var SERVER_VERSION = "0.5.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21917,6 +21917,9 @@ function fail(body) {
 function billingUrl() {
   return `${apiBase()}/en/billing`;
 }
+function spendOffText() {
+  return `Spending minerals is turned off for this connection, so nothing was charged. The user can turn it on at ${apiBase()}/auth/mcp (Connected apps \u2192 Allow spending), then ask again.`;
+}
 function describeError(e) {
   if (e instanceof NotSignedInError) return fail(e.message);
   if (e instanceof ApiError) {
@@ -21924,6 +21927,7 @@ function describeError(e) {
       return fail(`${e.message}
 The user can buy minerals at ${billingUrl()}.`);
     }
+    if (e.status === 403 && e.code === "SPEND_NOT_ALLOWED") return fail(spendOffText());
     if (e.status === 429) return fail(`${e.message} (rate limited)`);
     return fail(`${e.message}${e.code ? ` [${e.code}]` : ""}`);
   }
@@ -22169,9 +22173,16 @@ Once they've approved, call login again (or any other tool) to continue.`,
       return text(
         `Minerals: ${me.minerals}
 SC2 profile: ${profile}
-Prices: AI Coach report 1 mineral; follow-up questions 3 free per replay, then 1 mineral per 20.
+` + (me.tokenCanSpend === false ? `Spending from this connection: OFF (turn it on at ${apiBase()}/auth/mcp \u2192 Connected apps)
+` : me.tokenCanSpend === true ? "Spending from this connection: allowed\n" : "") + `Prices: AI Coach report 1 mineral; follow-up questions 3 free per replay, then 1 mineral per 20.
 Buy minerals: ${billingUrl()}`,
-        { minerals: me.minerals, profileName: me.profileName, profileRegion: me.profileRegion, billingUrl: billingUrl() }
+        {
+          minerals: me.minerals,
+          canSpend: me.tokenCanSpend ?? null,
+          profileName: me.profileName,
+          profileRegion: me.profileRegion,
+          billingUrl: billingUrl()
+        }
       );
     })
   );
@@ -22385,6 +22396,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
             run = startRun(summary.id, { language: language ?? summary.analysisLanguage ?? "en", regenerate: true });
           } else {
             const me = await getJson("/api/me");
+            if (me.tokenCanSpend === false) return fail(spendOffText());
             if (me.minerals < COACH_PRICE) {
               return fail(`Running the AI Coach costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
             }
@@ -22476,6 +22488,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
         });
       }
       const me = await getJson("/api/me");
+      if (me.tokenCanSpend === false) return fail(spendOffText());
       if (me.minerals < 1) return fail(`The balance is 0 minerals. The user can buy minerals at ${billingUrl()}.`);
       const gate = await confirmSpend(server, confirm_spend, `Spend 1 mineral for 20 more questions on ${summary.map ?? "this replay"}? Your balance is ${me.minerals}.`);
       if (gate === "declined") return text("Not purchased: the user declined the spend.", { status: "declined" });

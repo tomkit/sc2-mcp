@@ -15,7 +15,7 @@ Every tool except `login` needs the user signed in. If a tool says they aren't, 
 - Follow-up questions: **3 free per replay**, then **1 mineral per 20 more**.
 - Knowledge search, uploads and reading reports: free.
 
-Before calling `analyze_replay` or `unlock_more_questions` with `confirm_spend: true`, tell the user the price and their balance (`get_account`) and wait for a clear yes. Never set `confirm_spend` on your own. If the balance is too low, give them the billing link from the tool result.
+Spending is off for a new connection until the user allows it on the website; if a paid tool says so, give them the link it returns and don't retry. Before calling `analyze_replay` or `unlock_more_questions` with `confirm_spend: true`, tell the user the price and their balance (`get_account`) and wait for a clear yes. Never set `confirm_spend` on your own. If the balance is too low, give them the billing link from the tool result.
 
 ## Typical flows
 - **General question** ("what counters mass Void Rays?"): `search_sc2_knowledge`, then answer from the passages and cite their URLs. Don't invent unit numbers the passages don't give.
