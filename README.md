@@ -79,7 +79,7 @@ The browser has to run on the same machine as the server, because the sign-in co
 | `get_account` | Mineral balance, claimed SC2 profile, prices |
 | `search_sc2_knowledge` | Passages from the SC2 knowledge base for general questions |
 | `upload_replay` | Upload a `.SC2Replay` (or Brood War `.rep`) by `path` or `url` |
-| `list_my_replays` | Your uploads, newest first |
+| `list_my_replays` | Your games, newest first: ones you played (via your linked SC2 profile), coached, asked about or uploaded, with your result and whether a report exists |
 | `get_analysis` | A replay's details and its AI Coach report, if one exists |
 | `analyze_replay` | Run the AI Coach (1 mineral, needs `confirm_spend`) |
 | `ask_about_replay` | Ask the coach a follow-up question about a coached replay |
