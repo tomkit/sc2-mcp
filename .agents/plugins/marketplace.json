@@ -1,0 +1,12 @@
+{
+  "name": "starcraft2-ai",
+  "interface": { "displayName": "StarCraft2.ai" },
+  "plugins": [
+    {
+      "name": "sc2-coach",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+      "category": "Productivity"
+    }
+  ]
+}

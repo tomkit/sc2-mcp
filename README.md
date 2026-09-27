@@ -1,6 +1,6 @@
-# sc2-mcp — StarCraft II AI Coach for Claude and other MCP clients
+# sc2-mcp — StarCraft II AI Coach for Claude, Codex and other MCP clients
 
-An [MCP](https://modelcontextprotocol.io) server for [StarCraft2.ai](https://www.starcraft2.ai). From Claude Code, Claude Desktop, Cursor or any other MCP client you can:
+An [MCP](https://modelcontextprotocol.io) server for [StarCraft2.ai](https://www.starcraft2.ai). From Claude Code, Codex, Claude Desktop, Cursor or any other MCP client you can:
 
 - **Ask StarCraft II questions.** Answers come from the same knowledge base the AI Coach cites: Liquipedia unit data, current patch notes, strategy articles and pro-game insights.
 - **Upload a replay** from a file on your computer or from a download link.
@@ -28,6 +28,17 @@ A tool never spends minerals unless it's called with `confirm_spend: true`, and 
 
 The plugin adds the MCP server and a skill that tells Claude how to use it. Then ask something like *"analyze my latest SC2 replay"* and Claude will sign you in.
 
+### Codex (plugin)
+
+```
+codex plugin marketplace add tomkit/sc2-mcp
+codex plugin add sc2-coach@starcraft2-ai
+```
+
+Same server and skill as the Claude Code plugin. Start a new Codex session and ask it to analyze a replay; it will sign you in through the browser. `codex mcp list` should show `sc2`.
+
+Or register just the server: `codex mcp add sc2 -- node /absolute/path/to/sc2-mcp/dist/index.js`.
+
 ### Claude Code (server only)
 
 ```
@@ -50,7 +61,7 @@ Clone the repo, then add this to the client's MCP config (for Claude Desktop, `c
 }
 ```
 
-It needs Node.js 18.17 or newer on your `PATH`, including for the Claude Code plugin (Claude Code's native installer doesn't bring Node with it). `dist/index.js` is a self-contained bundle, so there is nothing to `npm install`.
+It needs Node.js 18.17 or newer on your `PATH`, including for the Claude Code and Codex plugins (neither installer brings Node with it). `dist/index.js` is a self-contained bundle, so there is nothing to `npm install`.
 
 ## Signing in
 

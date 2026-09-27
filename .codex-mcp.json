@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sc2": {
+      "command": "node",
+      "args": ["./dist/index.js"],
+      "cwd": ".",
+      "env_vars": ["HOME", "PATH", "SC2_API_TOKEN", "SC2_API_BASE", "SC2_MCP_CREDENTIALS", "SC2_MCP_NO_BROWSER"],
+      "tool_timeout_sec": 660
+    }
+  }
+}

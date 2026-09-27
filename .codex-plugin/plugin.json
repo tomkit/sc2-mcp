@@ -1,0 +1,26 @@
+{
+  "name": "sc2-coach",
+  "version": "0.1.0",
+  "description": "StarCraft II AI Coach from StarCraft2.ai: ask SC2 questions, upload your replays, get a coaching report and ask follow-up questions about your games.",
+  "author": { "name": "StarCraft2.ai", "url": "https://www.starcraft2.ai" },
+  "homepage": "https://github.com/tomkit/sc2-mcp",
+  "repository": "https://github.com/tomkit/sc2-mcp",
+  "license": "MIT",
+  "keywords": ["starcraft", "starcraft 2", "sc2", "replay", "coach", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.codex-mcp.json",
+  "interface": {
+    "displayName": "StarCraft II AI Coach",
+    "shortDescription": "Coach your StarCraft II games with StarCraft2.ai",
+    "longDescription": "Ask StarCraft II questions answered from Liquipedia, patch notes and pro-game insights; upload a replay from your computer; get an AI Coach report and ask follow-up questions about the game. Uses your StarCraft2.ai account and minerals at the website's prices, and never spends without your confirmation.",
+    "developerName": "StarCraft2.ai",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://www.starcraft2.ai",
+    "defaultPrompt": [
+      "Analyze my latest StarCraft II replay",
+      "What counters mass Void Rays in ZvP?",
+      "What should I practice from my last game?"
+    ]
+  }
+}
