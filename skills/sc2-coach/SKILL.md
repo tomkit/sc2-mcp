@@ -1,0 +1,27 @@
+---
+name: sc2-coach
+description: Use when the user asks a StarCraft II question, wants a replay analyzed or coached, or asks about one of their SC2 games — uploading a .SC2Replay, running the StarCraft2.ai AI Coach, or asking follow-up questions about a game.
+---
+
+# StarCraft II coaching with StarCraft2.ai
+
+The `sc2` MCP server connects to the user's StarCraft2.ai account.
+
+## Sign-in
+Every tool except `login` needs the user signed in. If a tool says they aren't, call `login`: it opens the browser. If the result says it's still waiting, show the user the URL and call `login` again after they click Allow.
+
+## Minerals (paid credits) — always ask first
+- AI Coach report on a replay: **1 mineral**. A replay that already has a report is free to read.
+- Follow-up questions: **3 free per replay**, then **1 mineral per 20 more**.
+- Knowledge search, uploads and reading reports: free.
+
+Before calling `analyze_replay` or `unlock_more_questions` with `confirm_spend: true`, tell the user the price and their balance (`get_account`) and wait for a clear yes. Never set `confirm_spend` on your own. If the balance is too low, give them the billing link from the tool result.
+
+## Typical flows
+- **General question** ("what counters mass Void Rays?"): `search_sc2_knowledge`, then answer from the passages and cite their URLs. Don't invent unit numbers the passages don't give.
+- **"Analyze my last game"**: find the replay file. Default folders:
+  - Windows: `Documents\StarCraft II\Accounts\<id>\<id>\Replays\Multiplayer`
+  - macOS: `~/Library/Application Support/Blizzard/StarCraft II/Accounts/<id>/<id>/Replays/Multiplayer`
+  Pick the newest `.SC2Replay`, `upload_replay` it, then `get_analysis`. If there's no report, offer `analyze_replay` (1 mineral).
+- **Long runs**: a coach run takes 3–7 minutes. If `analyze_replay` returns "still analyzing", call `get_analysis` with the same replay to wait for it. Don't start it again.
+- **Follow-ups**: `ask_about_replay` with the user's question in their words. When questions run out, offer `unlock_more_questions`.

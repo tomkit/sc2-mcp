@@ -1,0 +1,10 @@
+{
+  "name": "sc2-coach",
+  "version": "0.1.0",
+  "description": "StarCraft II AI Coach from StarCraft2.ai: ask SC2 questions, upload your replays, get a coaching report and ask follow-up questions about your games.",
+  "author": { "name": "StarCraft2.ai", "url": "https://www.starcraft2.ai" },
+  "homepage": "https://github.com/tomkit/sc2-mcp",
+  "repository": "https://github.com/tomkit/sc2-mcp",
+  "license": "MIT",
+  "keywords": ["starcraft", "sc2", "replay", "coach", "mcp"]
+}

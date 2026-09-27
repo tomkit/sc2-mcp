@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "starcraft2-ai",
+  "description": "StarCraft2.ai plugins for Claude Code.",
+  "owner": { "name": "StarCraft2.ai", "url": "https://www.starcraft2.ai" },
+  "plugins": [
+    {
+      "name": "sc2-coach",
+      "description": "StarCraft II AI Coach: ask SC2 questions, upload replays, get coaching reports and ask follow-ups. Uses your StarCraft2.ai account and minerals.",
+      "category": "productivity",
+      "source": "./",
+      "homepage": "https://github.com/tomkit/sc2-mcp"
+    }
+  ]
+}
