@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.1.0";
+var SERVER_VERSION = "0.2.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21942,9 +21942,18 @@ Content-Type: application/octet-stream\r
 `);
   return { body: Buffer.concat([head, bytes, tail]), contentType: `multipart/form-data; boundary=${boundary}` };
 }
+var RELATION_LABEL = {
+  played: "you played",
+  coached: "you ran the coach",
+  asked: "you asked about it",
+  uploaded: "you uploaded"
+};
 function replayLine(r) {
   const players = r.players.map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}`).join(" vs ");
-  return `- ${r.id} \xB7 ${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""} \xB7 coach: ${r.hasAnalysis ? "yes" : "no"}`;
+  const when = (r.playedAt ?? "").slice(0, 10);
+  const you = r.you ? ` \xB7 you: ${r.you.name}${r.you.result ? ` (${r.you.result})` : ""}` : "";
+  const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
+  return `- ${r.id} \xB7 ${when ? `${when} \xB7 ` : ""}${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""}${you} \xB7 ${report} \xB7 ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}`;
 }
 function runStatusText(run, r) {
   const secs = Math.round((Date.now() - run.startedAt) / 1e3);
@@ -22007,7 +22016,7 @@ function createServer2() {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "StarCraft II AI Coach (StarCraft2.ai)" },
     {
-      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
+      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first: games they played, coached or uploaded before are already there, and an existing report is free to re-read. Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
     }
   );
   server.registerTool(
@@ -22165,15 +22174,31 @@ ${next}`, {
   server.registerTool(
     "list_my_replays",
     {
-      title: "List my replays",
-      description: "The signed-in user's uploaded replays on StarCraft2.ai, newest first, with whether each has an AI Coach report. Free.",
-      inputSchema: { limit: external_exports.number().int().min(1).max(50).optional().describe("How many (default 10).") },
+      title: "List my games",
+      description: "The signed-in user's games on StarCraft2.ai, newest first: games they played (matched by their claimed SC2 profile), ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, and whether an AI Coach report exists. CALL THIS FIRST when the user refers to 'my last game', 'my latest replay', 'that game I lost on <map>' or any game of theirs \u2014 an existing report is free to re-read with get_analysis, so there's no need to find or upload a file. filter 'coached' lists only games with a report. Free.",
+      inputSchema: {
+        limit: external_exports.number().int().min(1).max(50).optional().describe("How many (default 10)."),
+        filter: external_exports.enum(["all", "coached", "played"]).optional().describe("'coached': only games with an AI Coach report. 'played': only games the user played in. Default 'all'.")
+      },
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
-    guarded(async ({ limit }) => {
-      const { replays } = await getJson(`/api/mcp/replay?mine=1&limit=${limit ?? 10}`);
-      if (replays.length === 0) return text("No uploaded replays yet. Use upload_replay.", { replays: [] });
-      return text(replays.map(replayLine).join("\n"), { replays });
+    guarded(async ({ limit, filter }) => {
+      const { replays, profile } = await getJson(
+        `/api/mcp/replay?mine=1&limit=${limit ?? 10}&filter=${filter ?? "all"}`
+      );
+      const claimHint = profile ? "" : `
+
+No SC2 profile is linked to this account, so games the user played but never coached, asked about or uploaded aren't listed. They can link it under "Set your profile" in the account menu at ${apiBase()}.`;
+      if (replays.length === 0) {
+        const none = filter === "coached" ? "None of the user's games has an AI Coach report yet." : "No games found for this account yet. Upload a replay with upload_replay.";
+        return text(none + claimHint, { replays: [], profile });
+      }
+      const head = profile ? `Games for ${profile.name} (${profile.region.toUpperCase()}), newest first:` : "Games, newest first:";
+      return text(`${head}
+${replays.map(replayLine).join("\n")}${claimHint}`, {
+        replays,
+        profile
+      });
     })
   );
   const replayArg = external_exports.string().min(1).describe("Replay id, short id, slug, or a StarCraft2.ai replay URL.");

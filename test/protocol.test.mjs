@@ -49,6 +49,13 @@ before(async () => {
     if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
     const url = new URL(req.url, "http://x");
     if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true });
+    if (url.pathname === "/api/mcp/replay" && url.searchParams.get("mine") === "1") {
+      state.lastListQuery = url.search;
+      return json(200, {
+        profile: { name: "Alice", region: "na" },
+        replays: [{ ...summary(), playedAt: "2026-09-20T10:00:00Z", relations: ["played", "coached"], you: { name: "Alice", race: "Protoss", result: "Win" } }],
+      });
+    }
     if (url.pathname === "/api/mcp/replay") return json(200, summary());
     if (url.pathname === "/api/analyze") {
       state.analyzeCalls++;
@@ -135,6 +142,18 @@ test("with elicitation, the user's decline blocks the spend even when confirm_sp
   } finally {
     await asker.close();
   }
+});
+
+test("list_my_replays shows each game's links, the user's result and the filter", async () => {
+  const r = await client.callTool({ name: "list_my_replays", arguments: { filter: "coached", limit: 5 } });
+  assert.ok(!r.isError, r.content[0].text);
+  const t = r.content[0].text;
+  assert.match(t, /Games for Alice \(NA\)/);
+  assert.match(t, new RegExp(REPLAY));
+  assert.match(t, /you: Alice \(Win\)/);
+  assert.match(t, /you played, you ran the coach/);
+  assert.match(state.lastListQuery, /filter=coached/);
+  assert.equal(r.structuredContent.replays[0].relations.length, 2);
 });
 
 test("confirmed run streams progress and returns the report", async () => {

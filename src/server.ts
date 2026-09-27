@@ -14,6 +14,8 @@ import {
   postJson,
   request,
   type Me,
+  type MyReplay,
+  type ReplayRelation,
   type ReplaySummary,
 } from "./api.js";
 import { apiBase, COACH_LANGUAGES, MAX_REPLAY_BYTES, SERVER_NAME, SERVER_VERSION, USER_AGENT } from "./config.js";
@@ -155,9 +157,22 @@ function multipart(field: string, filename: string, bytes: Buffer): { body: Buff
   return { body: Buffer.concat([head, bytes, tail]), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-function replayLine(r: ReplaySummary): string {
+const RELATION_LABEL: Record<ReplayRelation, string> = {
+  played: "you played",
+  coached: "you ran the coach",
+  asked: "you asked about it",
+  uploaded: "you uploaded",
+};
+
+function replayLine(r: MyReplay): string {
   const players = r.players.map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}`).join(" vs ");
-  return `- ${r.id} · ${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""} · coach: ${r.hasAnalysis ? "yes" : "no"}`;
+  const when = (r.playedAt ?? "").slice(0, 10);
+  const you = r.you ? ` · you: ${r.you.name}${r.you.result ? ` (${r.you.result})` : ""}` : "";
+  const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
+  return (
+    `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${you}` +
+    ` · ${report} · ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}`
+  );
 }
 
 function runStatusText(run: CoachRun, r: ReplaySummary): string {
@@ -246,7 +261,9 @@ export function createServer(): McpServer {
         "Every tool except `login` needs the user to be signed in; if a tool says they aren't, call `login`. " +
         "Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions " +
         "about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless " +
-        "`confirm_spend` is true — ask the user first and only set it after they agree. Knowledge search, uploads and " +
+        "`confirm_spend` is true — ask the user first and only set it after they agree. When the user mentions one of their " +
+        "games ('my last game'), call `list_my_replays` first: games they played, coached or uploaded before are already " +
+        "there, and an existing report is free to re-read. Knowledge search, uploads and " +
         "reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer " +
         "from the passages it returns, citing their URLs.",
     },
@@ -417,15 +434,42 @@ export function createServer(): McpServer {
   server.registerTool(
     "list_my_replays",
     {
-      title: "List my replays",
-      description: "The signed-in user's uploaded replays on StarCraft2.ai, newest first, with whether each has an AI Coach report. Free.",
-      inputSchema: { limit: z.number().int().min(1).max(50).optional().describe("How many (default 10).") },
+      title: "List my games",
+      description:
+        "The signed-in user's games on StarCraft2.ai, newest first: games they played (matched by their claimed SC2 profile), " +
+        "ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, and whether an " +
+        "AI Coach report exists. CALL THIS FIRST when the user refers to 'my last game', 'my latest replay', 'that game I " +
+        "lost on <map>' or any game of theirs — an existing report is free to re-read with get_analysis, so there's no need " +
+        "to find or upload a file. filter 'coached' lists only games with a report. Free.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(50).optional().describe("How many (default 10)."),
+        filter: z
+          .enum(["all", "coached", "played"])
+          .optional()
+          .describe("'coached': only games with an AI Coach report. 'played': only games the user played in. Default 'all'."),
+      },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    guarded(async ({ limit }: { limit?: number }) => {
-      const { replays } = await getJson<{ replays: ReplaySummary[] }>(`/api/mcp/replay?mine=1&limit=${limit ?? 10}`);
-      if (replays.length === 0) return text("No uploaded replays yet. Use upload_replay.", { replays: [] });
-      return text(replays.map(replayLine).join("\n"), { replays: replays as unknown as Record<string, unknown>[] } as Record<string, unknown>);
+    guarded(async ({ limit, filter }: { limit?: number; filter?: "all" | "coached" | "played" }) => {
+      const { replays, profile } = await getJson<{ replays: MyReplay[]; profile: { name: string; region: string } | null }>(
+        `/api/mcp/replay?mine=1&limit=${limit ?? 10}&filter=${filter ?? "all"}`,
+      );
+      const claimHint = profile
+        ? ""
+        : "\n\nNo SC2 profile is linked to this account, so games the user played but never coached, asked about or uploaded " +
+          `aren't listed. They can link it under "Set your profile" in the account menu at ${apiBase()}.`;
+      if (replays.length === 0) {
+        const none =
+          filter === "coached"
+            ? "None of the user's games has an AI Coach report yet."
+            : "No games found for this account yet. Upload a replay with upload_replay.";
+        return text(none + claimHint, { replays: [], profile });
+      }
+      const head = profile ? `Games for ${profile.name} (${profile.region.toUpperCase()}), newest first:` : "Games, newest first:";
+      return text(`${head}\n${replays.map(replayLine).join("\n")}${claimHint}`, {
+        replays: replays as unknown as Record<string, unknown>[],
+        profile,
+      } as Record<string, unknown>);
     }),
   );
 

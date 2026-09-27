@@ -19,9 +19,10 @@ Before calling `analyze_replay` or `unlock_more_questions` with `confirm_spend: 
 
 ## Typical flows
 - **General question** ("what counters mass Void Rays?"): `search_sc2_knowledge`, then answer from the passages and cite their URLs. Don't invent unit numbers the passages don't give.
-- **"Analyze my last game"**: find the replay file. Default folders:
+- **"Analyze my last game" / "that game on <map>"**: call `list_my_replays` first. It lists games the user played (via their claimed SC2 profile), coached, asked about or uploaded, newest first, with their result. If the game has a report, `get_analysis` re-reads it for free. If it's listed without a report, offer `analyze_replay` (1 mineral). Only when the game isn't listed, find the replay file. Default folders:
   - Windows: `Documents\StarCraft II\Accounts\<id>\<id>\Replays\Multiplayer`
   - macOS: `~/Library/Application Support/Blizzard/StarCraft II/Accounts/<id>/<id>/Replays/Multiplayer`
   Pick the newest `.SC2Replay`, `upload_replay` it, then `get_analysis`. If there's no report, offer `analyze_replay` (1 mineral).
+- **Follow-ups on an older game**: `list_my_replays` with `filter: "coached"`, then `ask_about_replay` with that replay id.
 - **Long runs**: a coach run takes 3–7 minutes. If `analyze_replay` returns "still analyzing", call `get_analysis` with the same replay to wait for it. Don't start it again.
 - **Follow-ups**: `ask_about_replay` with the user's question in their words. When questions run out, offer `unlock_more_questions`.

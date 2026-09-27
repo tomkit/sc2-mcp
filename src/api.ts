@@ -105,6 +105,15 @@ export interface ReplaySummary {
   analysisLanguage?: string | null;
 }
 
+export type ReplayRelation = "played" | "coached" | "asked" | "uploaded";
+
+/** A row of list_my_replays: a replay plus how the user is linked to it. */
+export interface MyReplay extends ReplaySummary {
+  relations: ReplayRelation[];
+  /** The user's own slot, when their claimed profile played in it. */
+  you: { name: string | null; race: string | null; result: string | null } | null;
+}
+
 export interface AiAnalysis {
   overallAssessment: string;
   teamAnalyses: Array<{
