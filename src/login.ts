@@ -7,19 +7,34 @@ import { apiBase, USER_AGENT } from "./config.js";
 import { saveToken } from "./credentials.js";
 
 /**
- * Browser sign-in: OAuth 2.1 authorization code + PKCE (S256) with a
- * loopback redirect, the native-app pattern of RFC 8252. The server binds
- * an ephemeral port on 127.0.0.1, opens StarCraft2.ai's consent page, and
- * exchanges the returned code (single use, 5 minutes) for a bearer token.
+ * Sign-in, two ways at once; whichever the user finishes first wins.
+ *
+ * - On this computer: OAuth 2.1 authorization code + PKCE (S256) with a
+ *   loopback redirect, the native-app pattern of RFC 8252. The server binds
+ *   an ephemeral port on 127.0.0.1, opens StarCraft2.ai's consent page, and
+ *   exchanges the returned code (single use, 5 minutes) for a bearer token.
+ * - From any other device (a phone, when the server runs on a Mac you're
+ *   not sitting at, or over SSH): the device authorization grant of
+ *   RFC 8628. The user opens the verification page and types a short code;
+ *   this process polls the token endpoint. Nothing is redirected anywhere.
  *
  * One flow at a time. It outlives the tool call that started it, so a user
- * who takes a while in the browser just calls a tool again once done.
+ * who takes a while just calls a tool again once done.
  */
 
 const FLOW_TTL_MS = 10 * 60 * 1000;
 
+export interface DeviceLogin {
+  /** Where to enter the code. Deliberately never combined with the code into one link. */
+  verificationUri: string;
+  userCode: string;
+  expiresAt: number;
+}
+
 export interface LoginFlow {
   url: string;
+  /** The other-device option, or null if the site didn't offer one. */
+  device: DeviceLogin | null;
   done: Promise<void>;
   settled: boolean;
   error: string | null;
@@ -144,7 +159,7 @@ export async function startLogin(): Promise<LoginFlow> {
     state,
   }).toString();
 
-  const flow: LoginFlow = { url: authorize.toString(), done, settled: false, error: null };
+  const flow: LoginFlow = { url: authorize.toString(), device: null, done, settled: false, error: null };
   active = flow;
 
   function settle(error: Error | null) {
@@ -158,6 +173,73 @@ export async function startLogin(): Promise<LoginFlow> {
     else resolveDone();
   }
 
+  flow.device = await startDeviceLogin(flow, settle);
   openInBrowser(flow.url);
   return flow;
+}
+
+/**
+ * Ask for a device code and poll for the token in the background until the
+ * flow settles. Returns null when the site doesn't offer it (the browser
+ * option still works).
+ */
+async function startDeviceLogin(flow: LoginFlow, settle: (e: Error | null) => void): Promise<DeviceLogin | null> {
+  const base = apiBase();
+  const headers = { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "User-Agent": USER_AGENT };
+  let start: { device_code?: string; user_code?: string; verification_uri?: string; expires_in?: number; interval?: number };
+  try {
+    const res = await fetch(`${base}/api/mcp-auth/device`, {
+      method: "POST",
+      headers,
+      body: new URLSearchParams({ client_name: `SC2 MCP on ${hostname().slice(0, 40)}` }),
+    });
+    if (!res.ok) return null;
+    start = await res.json();
+  } catch {
+    return null;
+  }
+  if (!start.device_code || !start.user_code || !start.verification_uri) return null;
+  // Only ever send the user to the site we're signing in to.
+  if (new URL(start.verification_uri).origin !== new URL(base).origin) return null;
+
+  const deviceCode = start.device_code;
+  let interval = Math.max(1, start.interval ?? 5) * 1000;
+  const expiresAt = Date.now() + (start.expires_in ?? 600) * 1000;
+  void (async () => {
+    while (!flow.settled && Date.now() < expiresAt) {
+      await new Promise((r) => setTimeout(r, interval));
+      if (flow.settled) return;
+      let body: { access_token?: string; expires_in?: number; error?: string; error_description?: string } = {};
+      try {
+        const res = await fetch(`${base}/api/mcp-auth/token`, {
+          method: "POST",
+          headers,
+          body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: deviceCode }),
+        });
+        body = await res.json().catch(() => ({}));
+      } catch {
+        continue; // network blip: try again next interval
+      }
+      if (body.access_token) {
+        await saveToken(body.access_token, body.expires_in ?? 180 * 86400);
+        settle(null);
+        return;
+      }
+      switch (body.error) {
+        case "authorization_pending":
+          break;
+        case "slow_down":
+          interval += 5000; // RFC 8628 §3.5
+          break;
+        case "access_denied":
+          settle(new Error("Sign-in was cancelled on the other device."));
+          return;
+        case "expired_token":
+          return; // the browser option may still finish; the flow's own timer ends it
+        default:
+          return; // stop polling; leave the browser option running
+      }
+    }
+  })();
+  return { verificationUri: start.verification_uri, userCode: start.user_code, expiresAt };
 }

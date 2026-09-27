@@ -13,7 +13,7 @@ import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const TOKEN = "sc2_test_token";
 const REPLAY = "11111111-2222-3333-4444-555555555555";
-const state = { minerals: 3, analyzeCalls: 0, analysis: null, unauthorized: 0 };
+const state = { minerals: 3, analyzeCalls: 0, analysis: null, unauthorized: 0, devicePolls: 0, deviceApproved: false };
 
 const ANALYSIS = {
   overallAssessment: "A close {Alice|p:Alice} win over {p:Bob}.",
@@ -46,8 +46,26 @@ let api, base, client, credDir;
 before(async () => {
   api = createServer((req, res) => {
     const json = (status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
-    if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
     const url = new URL(req.url, "http://x");
+    // Device sign-in (RFC 8628): unauthenticated endpoints.
+    if (url.pathname === "/api/mcp-auth/device") {
+      return json(200, { device_code: "dev-123", user_code: "BCDF-GHJK", verification_uri: `${base}/auth/device`, expires_in: 600, interval: 1 });
+    }
+    if (url.pathname === "/api/mcp-auth/token") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      req.on("end", () => {
+        const p = new URLSearchParams(raw);
+        state.devicePolls++;
+        if (p.get("grant_type") !== "urn:ietf:params:oauth:grant-type:device_code" || p.get("device_code") !== "dev-123") {
+          return json(400, { error: "invalid_grant" });
+        }
+        if (!state.deviceApproved) return json(400, { error: "authorization_pending" });
+        return json(200, { access_token: TOKEN, token_type: "Bearer", expires_in: 3600 });
+      });
+      return;
+    }
+    if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
     if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true });
     if (url.pathname === "/api/mcp/replay" && url.searchParams.get("mine") === "1") {
       state.lastListQuery = url.search;
@@ -141,6 +159,33 @@ test("with elicitation, the user's decline blocks the spend even when confirm_sp
     assert.equal(state.minerals, 3);
   } finally {
     await asker.close();
+  }
+});
+
+test("login offers a code for another device, and signs in once it's approved there", async () => {
+  const fresh = new Client({ name: "device-test", version: "1.0.0" });
+  await fresh.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [new URL("../dist/index.js", import.meta.url).pathname],
+      env: { ...process.env, SC2_API_BASE: base, SC2_API_TOKEN: "", SC2_MCP_NO_BROWSER: "1", SC2_MCP_CREDENTIALS: join(credDir, "device.json") },
+    }),
+  );
+  try {
+    const pending = await fresh.callTool({ name: "login", arguments: { wait_seconds: 0 } });
+    assert.equal(pending.structuredContent.status, "pending");
+    assert.equal(pending.structuredContent.user_code, "BCDF-GHJK");
+    assert.equal(pending.structuredContent.verification_uri, `${base}/auth/device`);
+    // The code is never folded into the address.
+    assert.ok(!pending.structuredContent.verification_uri.includes("BCDF"));
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.ok(state.devicePolls >= 1, "polls while waiting");
+    state.deviceApproved = true;
+    const done = await fresh.callTool({ name: "login", arguments: { wait_seconds: 10 } });
+    assert.ok(!done.isError, done.content[0].text);
+    assert.match(done.content[0].text, /Signed in|Already signed in/);
+  } finally {
+    await fresh.close();
   }
 });
 

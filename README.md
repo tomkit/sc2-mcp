@@ -65,11 +65,14 @@ It needs Node.js 18.17 or newer on your `PATH`, including for the Claude Code an
 
 ## Signing in
 
-Every tool except `login` needs you signed in. The `login` tool opens StarCraft2.ai in your browser. Sign in there if you aren't already, check the request, and click **Allow**. That's the OAuth 2.1 authorization-code flow with PKCE and a loopback redirect to `127.0.0.1` ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)). The server never sees your password.
+Every tool except `login` needs you signed in. `login` gives you two ways to approve, and whichever you finish first signs you in:
 
-The resulting token is saved to `~/.config/sc2-mcp/credentials.json` (`%APPDATA%\sc2-mcp` on Windows) with owner-only permissions. It lasts 180 days. `logout` revokes it, and so does **Disconnect** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp), which lists every connected device.
+- **On the same computer:** it opens StarCraft2.ai in your browser. Sign in if you aren't already, check the request and click **Allow**. That's the OAuth 2.1 authorization-code flow with PKCE and a loopback redirect to `127.0.0.1` ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)).
+- **From your phone or any other device:** it also gives you a short code like `BCDF-GHJK`. Open [starcraft2.ai/auth/device](https://www.starcraft2.ai/auth/device), enter the code and approve. That's the device authorization grant ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)): nothing is redirected to your computer, so it works when the server runs on a Mac you're not sitting at, over SSH, or in a container. Only enter a code that your own assistant gave you, and never one someone sent you.
 
-The browser has to run on the same machine as the server, because the sign-in comes back to `127.0.0.1`. For a remote box (SSH, a devcontainer, a cloud VM), sign in once on a machine with a browser, copy `access_token` out of its `credentials.json`, and set it as `SC2_API_TOKEN` in the remote server's environment. That variable takes precedence over the saved token, which follows the MCP spec's advice for stdio servers to take credentials from the environment. Treat the token like a password: it can spend your minerals.
+The server never sees your password. The resulting token is saved to `~/.config/sc2-mcp/credentials.json` (`%APPDATA%\sc2-mcp` on Windows) with owner-only permissions. It lasts 180 days. `logout` revokes it, and so does **Disconnect** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp), which lists every connected device.
+
+You can also set `SC2_API_TOKEN` in the server's environment; it takes precedence over the saved token, which follows the MCP spec's advice for stdio servers to take credentials from the environment. Treat a token like a password: it can spend your minerals.
 
 ## Tools
 

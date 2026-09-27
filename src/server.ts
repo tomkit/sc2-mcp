@@ -274,9 +274,10 @@ export function createServer(): McpServer {
     {
       title: "Sign in to StarCraft2.ai",
       description:
-        "Sign in to the user's StarCraft2.ai account. Opens the site's sign-in page in the browser (OAuth with PKCE); " +
-        "the user approves there and this tool finishes. Required before any other tool. If the browser didn't open, " +
-        "show the user the URL from the result.",
+        "Sign in to the user's StarCraft2.ai account. Required before any other tool. Opens the site's approval page in " +
+        "this computer's browser, and also returns a short code the user can enter on any other device (e.g. their phone) " +
+        "at the returned verification address — relay the address and the code to the user exactly as given, as two separate " +
+        "pieces. Whichever they finish first signs in. Call again after they've approved to continue.",
       inputSchema: {
         wait_seconds: z.number().int().min(0).max(300).optional().describe("How long to wait for the user to finish in the browser (default 45)."),
       },
@@ -298,14 +299,23 @@ export function createServer(): McpServer {
       const report = progressReporter(extra);
       const deadline = Date.now() + (wait_seconds ?? 45) * 1000;
       while (!flow.settled && Date.now() < deadline && !extra.signal.aborted) {
-        report("Waiting for approval in the browser");
+        report("Waiting for approval");
         await Promise.race([flow.done.catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
       }
       if (!flow.settled) {
+        const device = flow.device
+          ? `\n\nFrom a phone or any other device: go to ${flow.device.verificationUri} and enter the code ${flow.device.userCode} ` +
+            `(valid for 10 minutes). Tell the user to enter it only because they asked to connect their assistant.`
+          : "";
         return text(
-          `Waiting for the user to approve in the browser. If no browser window opened, ask them to open:\n${flow.url}\n\n` +
-            `Once they've clicked Allow, call login again (or any other tool) to continue.`,
-          { status: "pending", url: flow.url },
+          `Waiting for the user to approve. On this computer, a browser window opened; if it didn't, they can open:\n${flow.url}` +
+            `${device}\n\nOnce they've approved, call login again (or any other tool) to continue.`,
+          {
+            status: "pending",
+            url: flow.url,
+            verification_uri: flow.device?.verificationUri ?? null,
+            user_code: flow.device?.userCode ?? null,
+          },
         );
       }
       if (flow.error) return fail(flow.error);

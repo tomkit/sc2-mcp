@@ -8,7 +8,7 @@ description: Use when the user asks a StarCraft II question, wants a replay anal
 The `sc2` MCP server connects to the user's StarCraft2.ai account.
 
 ## Sign-in
-Every tool except `login` needs the user signed in. If a tool says they aren't, call `login`: it opens the browser. If the result says it's still waiting, show the user the URL and call `login` again after they click Allow.
+Every tool except `login` needs the user signed in. If a tool says they aren't, call `login`. It opens the browser on this computer and also returns a `verification_uri` and a `user_code` for signing in from another device. If the user isn't at this computer (they're on their phone, or you reach them through chat), send them the address and the code exactly as given, as two separate pieces: "Go to <verification_uri> and enter <user_code>." Never combine them into one link. Then call `login` again once they say they've approved.
 
 ## Minerals (paid credits) — always ask first
 - AI Coach report on a replay: **1 mineral**. A replay that already has a report is free to read.

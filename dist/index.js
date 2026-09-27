@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.2.0";
+var SERVER_VERSION = "0.3.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21720,7 +21720,7 @@ async function startLogin() {
     code_challenge_method: "S256",
     state
   }).toString();
-  const flow = { url: authorize.toString(), done, settled: false, error: null };
+  const flow = { url: authorize.toString(), device: null, done, settled: false, error: null };
   active = flow;
   function settle(error2) {
     if (flow.settled) return;
@@ -21731,8 +21731,68 @@ async function startLogin() {
     if (error2) rejectDone(error2);
     else resolveDone();
   }
+  flow.device = await startDeviceLogin(flow, settle);
   openInBrowser(flow.url);
   return flow;
+}
+async function startDeviceLogin(flow, settle) {
+  const base = apiBase();
+  const headers = { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "User-Agent": USER_AGENT };
+  let start;
+  try {
+    const res = await fetch(`${base}/api/mcp-auth/device`, {
+      method: "POST",
+      headers,
+      body: new URLSearchParams({ client_name: `SC2 MCP on ${hostname2().slice(0, 40)}` })
+    });
+    if (!res.ok) return null;
+    start = await res.json();
+  } catch {
+    return null;
+  }
+  if (!start.device_code || !start.user_code || !start.verification_uri) return null;
+  if (new URL(start.verification_uri).origin !== new URL(base).origin) return null;
+  const deviceCode = start.device_code;
+  let interval = Math.max(1, start.interval ?? 5) * 1e3;
+  const expiresAt = Date.now() + (start.expires_in ?? 600) * 1e3;
+  void (async () => {
+    while (!flow.settled && Date.now() < expiresAt) {
+      await new Promise((r) => setTimeout(r, interval));
+      if (flow.settled) return;
+      let body = {};
+      try {
+        const res = await fetch(`${base}/api/mcp-auth/token`, {
+          method: "POST",
+          headers,
+          body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: deviceCode })
+        });
+        body = await res.json().catch(() => ({}));
+      } catch {
+        continue;
+      }
+      if (body.access_token) {
+        await saveToken(body.access_token, body.expires_in ?? 180 * 86400);
+        settle(null);
+        return;
+      }
+      switch (body.error) {
+        case "authorization_pending":
+          break;
+        case "slow_down":
+          interval += 5e3;
+          break;
+        case "access_denied":
+          settle(new Error("Sign-in was cancelled on the other device."));
+          return;
+        case "expired_token":
+          return;
+        // the browser option may still finish; the flow's own timer ends it
+        default:
+          return;
+      }
+    }
+  })();
+  return { verificationUri: start.verification_uri, userCode: start.user_code, expiresAt };
 }
 
 // src/runs.ts
@@ -22023,7 +22083,7 @@ function createServer2() {
     "login",
     {
       title: "Sign in to StarCraft2.ai",
-      description: "Sign in to the user's StarCraft2.ai account. Opens the site's sign-in page in the browser (OAuth with PKCE); the user approves there and this tool finishes. Required before any other tool. If the browser didn't open, show the user the URL from the result.",
+      description: "Sign in to the user's StarCraft2.ai account. Required before any other tool. Opens the site's approval page in this computer's browser, and also returns a short code the user can enter on any other device (e.g. their phone) at the returned verification address \u2014 relay the address and the code to the user exactly as given, as two separate pieces. Whichever they finish first signs in. Call again after they've approved to continue.",
       inputSchema: {
         wait_seconds: external_exports.number().int().min(0).max(300).optional().describe("How long to wait for the user to finish in the browser (default 45).")
       },
@@ -22045,17 +22105,25 @@ function createServer2() {
       const report = progressReporter(extra);
       const deadline = Date.now() + (wait_seconds ?? 45) * 1e3;
       while (!flow.settled && Date.now() < deadline && !extra.signal.aborted) {
-        report("Waiting for approval in the browser");
+        report("Waiting for approval");
         await Promise.race([flow.done.catch(() => {
         }), new Promise((r) => setTimeout(r, 3e3))]);
       }
       if (!flow.settled) {
-        return text(
-          `Waiting for the user to approve in the browser. If no browser window opened, ask them to open:
-${flow.url}
+        const device = flow.device ? `
 
-Once they've clicked Allow, call login again (or any other tool) to continue.`,
-          { status: "pending", url: flow.url }
+From a phone or any other device: go to ${flow.device.verificationUri} and enter the code ${flow.device.userCode} (valid for 10 minutes). Tell the user to enter it only because they asked to connect their assistant.` : "";
+        return text(
+          `Waiting for the user to approve. On this computer, a browser window opened; if it didn't, they can open:
+${flow.url}${device}
+
+Once they've approved, call login again (or any other tool) to continue.`,
+          {
+            status: "pending",
+            url: flow.url,
+            verification_uri: flow.device?.verificationUri ?? null,
+            user_code: flow.device?.userCode ?? null
+          }
         );
       }
       if (flow.error) return fail(flow.error);
