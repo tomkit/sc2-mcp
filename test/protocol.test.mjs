@@ -70,10 +70,17 @@ before(async () => {
     if (url.pathname === "/api/mcp/replay" && url.searchParams.get("search") === "1") {
       state.lastListQuery = url.search;
       const other = url.searchParams.get("player") && url.searchParams.get("player") !== "me";
+      const all = url.searchParams.get("include") === "all";
       return json(200, {
         profile: { name: "Alice", region: "na" },
         player: other ? { name: url.searchParams.get("player"), region: null, me: false } : { name: "Alice", region: "na", me: true },
-        replays: [{ ...summary(), playedAt: "2026-09-20T10:00:00Z", relations: ["played", "coached"], you: { name: "Alice", race: "Protoss", result: "Win" } }],
+        scope: other ? "played" : all ? "all" : "played",
+        replays: [
+          ...(state.extraNotMine
+            ? [{ ...summary(), id: "22222222-2222-3333-4444-555555555555", playedAt: "2026-09-23T10:00:00Z", relations: ["coached"], you: null, player: null }]
+            : []),
+          { ...summary(), playedAt: "2026-09-20T10:00:00Z", relations: ["played", "coached"], you: { name: "Alice", race: "Protoss", result: "Win" } },
+        ],
       });
     }
     if (url.pathname === "/api/mcp/replay") return json(200, summary());
@@ -199,10 +206,10 @@ test("list_my_replays shows each game's links, the user's result and the filter"
   const r = await client.callTool({ name: "list_my_replays", arguments: { filter: "coached", limit: 5 } });
   assert.ok(!r.isError, r.content[0].text);
   const t = r.content[0].text;
-  assert.match(t, /game for Alice \(NA\)/);
+  assert.match(t, /games Alice \(NA\) played, coached, asked about or uploaded/, "coached filter widens to games the user looked at");
   assert.match(t, new RegExp(REPLAY));
-  assert.match(t, /you: Alice \(Win\)/);
-  assert.match(t, /you played, you ran the coach/);
+  assert.match(t, /you played: Alice \(Protoss\), Win/);
+  assert.match(state.lastListQuery, /include=all/);
   assert.match(state.lastListQuery, /has_report=1/);
   assert.equal(r.structuredContent.replays[0].relations.length, 2);
 });
@@ -219,12 +226,13 @@ test("search_replays passes every filter to the site and defaults to the signed-
   for (const [k, v] of Object.entries({ from: "2026-06", to: "2026-06-30", map: "Rainfall", opponent: "Bob", opponent_race: "Zerg", result: "loss", has_report: "1", limit: "5" })) {
     assert.equal(q.get(k), v, k);
   }
-  assert.match(r.content[0].text, /1 game for Alice \(NA\) matching/);
-  assert.match(r.content[0].text, /you: Alice \(Win\)/);
+  assert.match(r.content[0].text, /1 of the games Alice \(NA\) played, matching/);
+  assert.match(r.content[0].text, /you played: Alice \(Protoss\), Win/);
+  assert.equal(q.get("include"), null, "default is games the user played");
 
   const other = await client.callTool({ name: "search_replays", arguments: { player: "Serral", opponent_race: "Terran" } });
   assert.equal(new URLSearchParams(state.lastListQuery).get("player"), "Serral");
-  assert.match(other.content[0].text, /for Serral/);
+  assert.match(other.content[0].text, /games Serral played/);
   assert.doesNotMatch(other.content[0].text, /you ran the coach/, "someone else's games aren't tagged as the user's");
 
   const bad = await client.callTool({ name: "search_replays", arguments: { result: "draw" } });
@@ -244,6 +252,16 @@ test("with spending off for this connection, paid tools refuse before asking and
     assert.match(acct.content[0].text, /Spending from this connection: OFF/);
   } finally {
     state.canSpend = true;
+  }
+});
+
+test("a game the user only coached is labelled as not theirs", async () => {
+  state.extraNotMine = true;
+  try {
+    const r = await client.callTool({ name: "search_replays", arguments: { include: "all" } });
+    assert.match(r.content[0].text, /NOT a game the user played \(you ran the coach\)/);
+  } finally {
+    state.extraNotMine = false;
   }
 });
 

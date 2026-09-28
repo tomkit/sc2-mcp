@@ -179,10 +179,15 @@ function replayLine(r: MyReplay, me = true): string {
   const players = r.players.map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}`).join(" vs ");
   const when = (r.playedAt ?? "").slice(0, 10);
   const slot = r.player ?? r.you;
-  const who = slot ? ` · ${me ? "you" : "player"}: ${slot.name}${slot.result ? ` (${slot.result})` : ""}` : "";
+  // Say whose game it is in so many words: a model will otherwise read
+  // "your games" as "games you played" (it did, with someone else's game).
+  const who = slot
+    ? ` · ${me ? "you played" : "player"}: ${slot.name}${slot.race ? ` (${slot.race})` : ""}${slot.result ? `, ${slot.result}` : ""}`
+    : me
+      ? ` · NOT a game the user played (${r.relations.filter((x) => x !== "played").map((x) => RELATION_LABEL[x]).join(", ") || "linked"})`
+      : "";
   const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
-  const links = me && r.relations.length ? ` · ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}` : "";
-  return `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${who} · ${report}${links}`;
+  return `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${who} · ${report}`;
 }
 
 function runStatusText(run: CoachRun, r: ReplaySummary): string {
@@ -476,10 +481,11 @@ export function createServer(): McpServer {
       if (v === undefined || v === "" || v === false) continue;
       qs.set(k, v === true ? "1" : String(v));
     }
-    const { replays, profile, player } = await getJson<{
+    const { replays, profile, player, scope } = await getJson<{
       replays: MyReplay[];
       profile: { name: string; region: string } | null;
       player: { name: string; region: string | null; me: boolean } | null;
+      scope?: "played" | "all" | "linked";
     }>(`/api/mcp/replay?${qs}`);
     const me = !params.player || String(params.player).toLowerCase() === "me";
     const claimHint =
@@ -488,18 +494,25 @@ export function createServer(): McpServer {
           `uploaded aren't included. They can link it under "Set your profile" in the account menu at ${apiBase()}.`
         : "";
     const filters = Object.entries(params)
-      .filter(([k, v]) => v !== undefined && v !== "" && v !== false && k !== "limit" && k !== "player")
+      .filter(([k, v]) => v !== undefined && v !== "" && v !== false && k !== "limit" && k !== "player" && k !== "include")
       .map(([k, v]) => (v === true ? k : `${k}=${v}`))
       .join(", ");
-    const who = me ? (profile ? `${profile.name} (${profile.region.toUpperCase()})` : "this account") : `${player?.name ?? params.player}`;
+    const who = me
+      ? scope === "all"
+        ? `games ${profile ? `${profile.name} (${profile.region.toUpperCase()}) played, ` : ""}coached, asked about or uploaded`
+        : scope === "linked"
+          ? "games this account coached, asked about or uploaded (no SC2 profile is linked, so games the user played can't be identified)"
+          : `games ${profile ? `${profile.name} (${profile.region.toUpperCase()})` : "the user"} played`
+      : `games ${player?.name ?? params.player} played`;
     if (replays.length === 0) {
-      return text(`No games found for ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player });
+      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player, scope });
     }
-    const head = `${replays.length} game${replays.length === 1 ? "" : "s"} for ${who}${filters ? ` matching ${filters}` : ""}, newest first:`;
+    const head = `${replays.length} of the ${who}${filters ? `, matching ${filters}` : ""}, newest first:`;
     return text(`${head}\n${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
       replays: replays as unknown as Record<string, unknown>[],
       profile,
       player,
+      scope,
     } as Record<string, unknown>);
   }
 
@@ -508,23 +521,23 @@ export function createServer(): McpServer {
     {
       title: "List my games",
       description:
-        "The signed-in user's most recent games on StarCraft2.ai, newest first: games they played (matched by their claimed " +
-        "SC2 profile), ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, " +
-        "and whether an AI Coach report exists. CALL THIS FIRST when the user says 'my last game' or 'my latest replay' — an " +
-        "existing report is free to re-read with get_analysis. To narrow by date, map, opponent, race or result, use " +
-        "search_replays instead. Free.",
+        "The games the signed-in user PLAYED, newest first (matched by their linked SC2 profile), with their race and " +
+        "result and whether an AI Coach report exists. CALL THIS FIRST for 'my last game' / 'the game I last played'. " +
+        "filter 'coached' instead lists games with a report that the user played OR ran the coach on / asked about — " +
+        "those can be other people's games, and each line says so. An existing report is free to re-read with " +
+        "get_analysis. To narrow by date, map, opponent, race or result, use search_replays. Free.",
       inputSchema: {
         limit: z.number().int().min(1).max(50).optional().describe("How many (default 10)."),
         filter: z
           .enum(["all", "coached", "played"])
           .optional()
-          .describe("'coached': only games with an AI Coach report. 'played': only games the user played in. Default 'all'."),
+          .describe("Default: games the user played. 'coached': games with an AI Coach report the user played or looked at."),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     guarded(async ({ limit, filter }: { limit?: number; filter?: "all" | "coached" | "played" }) =>
       runSearch(
-        { limit: limit ?? 10, has_report: filter === "coached", played_only: filter === "played" },
+        { limit: limit ?? 10, has_report: filter === "coached", include: filter === "coached" ? "all" : undefined },
         filter === "coached" ? "None of them has an AI Coach report yet." : "Upload a replay with upload_replay.",
       ),
     ),
@@ -535,8 +548,8 @@ export function createServer(): McpServer {
     {
       title: "Search games",
       description:
-        "Search StarCraft II games on StarCraft2.ai. By default searches the SIGNED-IN USER's games (played via their claimed " +
-        "SC2 profile, coached, asked about or uploaded) — use it for requests like 'my losses on Rainfall last month', 'my PvZ " +
+        "Search StarCraft II games on StarCraft2.ai. By default searches the games the SIGNED-IN USER PLAYED (matched by " +
+        "their linked SC2 profile) — use it for requests like 'my losses on Rainfall last month', 'my PvZ " +
         "games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to " +
         "search their public games instead. Every filter is optional and applied before the limit, so results cover all " +
         "matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
@@ -556,6 +569,10 @@ export function createServer(): McpServer {
         result: z.enum(["win", "loss"]).optional().describe("The searched player's result."),
         game_type: z.string().regex(/^\d+v\d+$/).optional().describe("e.g. '1v1', '2v2'."),
         has_report: z.boolean().optional().describe("Only games that already have an AI Coach report (free to re-read)."),
+        include: z
+          .enum(["played", "all"])
+          .optional()
+          .describe("'played' (default): games the user played. 'all': also games they only ran the coach on, asked about or uploaded — often other people's games."),
         limit: z.number().int().min(1).max(50).optional().describe("How many (default 10)."),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },

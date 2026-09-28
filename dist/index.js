@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.6.0";
+var SERVER_VERSION = "0.7.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -22016,10 +22016,9 @@ function replayLine(r, me = true) {
   const players = r.players.map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}`).join(" vs ");
   const when = (r.playedAt ?? "").slice(0, 10);
   const slot = r.player ?? r.you;
-  const who = slot ? ` \xB7 ${me ? "you" : "player"}: ${slot.name}${slot.result ? ` (${slot.result})` : ""}` : "";
+  const who = slot ? ` \xB7 ${me ? "you played" : "player"}: ${slot.name}${slot.race ? ` (${slot.race})` : ""}${slot.result ? `, ${slot.result}` : ""}` : me ? ` \xB7 NOT a game the user played (${r.relations.filter((x) => x !== "played").map((x) => RELATION_LABEL[x]).join(", ") || "linked"})` : "";
   const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
-  const links = me && r.relations.length ? ` \xB7 ${r.relations.map((x) => RELATION_LABEL[x]).join(", ")}` : "";
-  return `- ${r.id} \xB7 ${when ? `${when} \xB7 ` : ""}${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""}${who} \xB7 ${report}${links}`;
+  return `- ${r.id} \xB7 ${when ? `${when} \xB7 ` : ""}${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""}${who} \xB7 ${report}`;
 }
 function runStatusText(run, r) {
   const secs = Math.round((Date.now() - run.startedAt) / 1e3);
@@ -22260,38 +22259,39 @@ ${next}`, {
       if (v === void 0 || v === "" || v === false) continue;
       qs.set(k, v === true ? "1" : String(v));
     }
-    const { replays, profile, player } = await getJson(`/api/mcp/replay?${qs}`);
+    const { replays, profile, player, scope } = await getJson(`/api/mcp/replay?${qs}`);
     const me = !params.player || String(params.player).toLowerCase() === "me";
     const claimHint = me && !profile ? `
 
 No SC2 profile is linked to this account, so games the user played but never coached, asked about or uploaded aren't included. They can link it under "Set your profile" in the account menu at ${apiBase()}.` : "";
-    const filters = Object.entries(params).filter(([k, v]) => v !== void 0 && v !== "" && v !== false && k !== "limit" && k !== "player").map(([k, v]) => v === true ? k : `${k}=${v}`).join(", ");
-    const who = me ? profile ? `${profile.name} (${profile.region.toUpperCase()})` : "this account" : `${player?.name ?? params.player}`;
+    const filters = Object.entries(params).filter(([k, v]) => v !== void 0 && v !== "" && v !== false && k !== "limit" && k !== "player" && k !== "include").map(([k, v]) => v === true ? k : `${k}=${v}`).join(", ");
+    const who = me ? scope === "all" ? `games ${profile ? `${profile.name} (${profile.region.toUpperCase()}) played, ` : ""}coached, asked about or uploaded` : scope === "linked" ? "games this account coached, asked about or uploaded (no SC2 profile is linked, so games the user played can't be identified)" : `games ${profile ? `${profile.name} (${profile.region.toUpperCase()})` : "the user"} played` : `games ${player?.name ?? params.player} played`;
     if (replays.length === 0) {
-      return text(`No games found for ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player });
+      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player, scope });
     }
-    const head = `${replays.length} game${replays.length === 1 ? "" : "s"} for ${who}${filters ? ` matching ${filters}` : ""}, newest first:`;
+    const head = `${replays.length} of the ${who}${filters ? `, matching ${filters}` : ""}, newest first:`;
     return text(`${head}
 ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
       replays,
       profile,
-      player
+      player,
+      scope
     });
   }
   server.registerTool(
     "list_my_replays",
     {
       title: "List my games",
-      description: "The signed-in user's most recent games on StarCraft2.ai, newest first: games they played (matched by their claimed SC2 profile), ran the AI Coach on, asked the coach about, or uploaded. Each shows its replay id, the user's result, and whether an AI Coach report exists. CALL THIS FIRST when the user says 'my last game' or 'my latest replay' \u2014 an existing report is free to re-read with get_analysis. To narrow by date, map, opponent, race or result, use search_replays instead. Free.",
+      description: "The games the signed-in user PLAYED, newest first (matched by their linked SC2 profile), with their race and result and whether an AI Coach report exists. CALL THIS FIRST for 'my last game' / 'the game I last played'. filter 'coached' instead lists games with a report that the user played OR ran the coach on / asked about \u2014 those can be other people's games, and each line says so. An existing report is free to re-read with get_analysis. To narrow by date, map, opponent, race or result, use search_replays. Free.",
       inputSchema: {
         limit: external_exports.number().int().min(1).max(50).optional().describe("How many (default 10)."),
-        filter: external_exports.enum(["all", "coached", "played"]).optional().describe("'coached': only games with an AI Coach report. 'played': only games the user played in. Default 'all'.")
+        filter: external_exports.enum(["all", "coached", "played"]).optional().describe("Default: games the user played. 'coached': games with an AI Coach report the user played or looked at.")
       },
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     guarded(
       async ({ limit, filter }) => runSearch(
-        { limit: limit ?? 10, has_report: filter === "coached", played_only: filter === "played" },
+        { limit: limit ?? 10, has_report: filter === "coached", include: filter === "coached" ? "all" : void 0 },
         filter === "coached" ? "None of them has an AI Coach report yet." : "Upload a replay with upload_replay."
       )
     )
@@ -22300,7 +22300,7 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
     "search_replays",
     {
       title: "Search games",
-      description: "Search StarCraft II games on StarCraft2.ai. By default searches the SIGNED-IN USER's games (played via their claimed SC2 profile, coached, asked about or uploaded) \u2014 use it for requests like 'my losses on Rainfall last month', 'my PvZ games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to search their public games instead. Every filter is optional and applied before the limit, so results cover all matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
+      description: "Search StarCraft II games on StarCraft2.ai. By default searches the games the SIGNED-IN USER PLAYED (matched by their linked SC2 profile) \u2014 use it for requests like 'my losses on Rainfall last month', 'my PvZ games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to search their public games instead. Every filter is optional and applied before the limit, so results cover all matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
       inputSchema: {
         player: external_exports.string().max(80).optional().describe("'me' (default) for the signed-in user, or another player's exact in-game name (case-insensitive)."),
         region: external_exports.enum(["na", "eu", "kr", "cn"]).optional().describe("With player: only that player's games on this server."),
@@ -22313,6 +22313,7 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
         result: external_exports.enum(["win", "loss"]).optional().describe("The searched player's result."),
         game_type: external_exports.string().regex(/^\d+v\d+$/).optional().describe("e.g. '1v1', '2v2'."),
         has_report: external_exports.boolean().optional().describe("Only games that already have an AI Coach report (free to re-read)."),
+        include: external_exports.enum(["played", "all"]).optional().describe("'played' (default): games the user played. 'all': also games they only ran the coach on, asked about or uploaded \u2014 often other people's games."),
         limit: external_exports.number().int().min(1).max(50).optional().describe("How many (default 10).")
       },
       annotations: { readOnlyHint: true, openWorldHint: true }
