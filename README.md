@@ -7,7 +7,7 @@ An [MCP](https://modelcontextprotocol.io) server for [StarCraft2.ai](https://www
 - **Get an AI Coach report** on a game: strengths, mistakes, key moments and what to work on.
 - **Ask follow-up questions** about a game ("why did I lose that fight at 8:30?").
 
-You need a StarCraft2.ai account. The tools use your account's **minerals**, at the same prices as the website:
+Uploading works without an account. Everything else needs a StarCraft2.ai account. To upload every game automatically instead, install the [auto-uploader](https://www.starcraft2.ai/en/uploader). The tools use your account's **minerals**, at the same prices as the website:
 
 | What | Cost |
 |---|---|
@@ -81,7 +81,7 @@ You can also set `SC2_API_TOKEN` in the server's environment; it takes precedenc
 | `login` / `logout` | Browser sign-in; revoke and forget the token |
 | `get_account` | Mineral balance, claimed SC2 profile, prices |
 | `search_sc2_knowledge` | Passages from the SC2 knowledge base for general questions |
-| `upload_replay` | Upload a `.SC2Replay` (or Brood War `.rep`) by `path` or `url` |
+| `upload_replay` | Upload a `.SC2Replay` (or Brood War `.rep`) by `path` or `url`. Works without signing in (anonymous upload) |
 | `list_my_replays` | Your games, newest first: ones you played (via your linked SC2 profile), coached, asked about or uploaded, with your result and whether a report exists |
 | `search_replays` | Search your games (or another player's, by name) by date range, map, opponent, your race, opponent's race, win/loss, 1v1/2v2 and whether a report exists |
 | `get_analysis` | A replay's details and its AI Coach report, if one exists |

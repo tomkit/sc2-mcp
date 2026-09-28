@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.7.0";
+var SERVER_VERSION = "0.8.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -22081,7 +22081,7 @@ function createServer2() {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "StarCraft II AI Coach (StarCraft2.ai)" },
     {
-      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June') use `search_replays`. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
+      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June') use `search_replays`. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
     }
   );
   server.registerTool(
@@ -22214,7 +22214,7 @@ ${r.content}`).join("\n\n");
     "upload_replay",
     {
       title: "Upload a replay",
-      description: "Upload a StarCraft II replay (.SC2Replay) \u2014 or a Brood War .rep \u2014 to StarCraft2.ai from a local file path or a download URL. The site parses it and it is attributed to the signed-in user. Returns the replay id and whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\\u2026\\Replays\\Multiplayer; on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/\u2026/Replays/Multiplayer.",
+      description: "Upload a StarCraft II replay (.SC2Replay) \u2014 or a Brood War .rep \u2014 to StarCraft2.ai from a local file path or a download URL. Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\\u2026\\Replays\\Multiplayer; on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/\u2026/Replays/Multiplayer.",
       inputSchema: {
         path: external_exports.string().min(1).optional().describe("Local path to the replay file (~ is expanded)."),
         url: external_exports.string().url().optional().describe("http(s) URL the replay file can be downloaded from.")
@@ -22223,22 +22223,34 @@ ${r.content}`).join("\n\n");
     },
     guarded(async (args, extra) => {
       if (!!args.path === !!args.url) return fail("Give exactly one of `path` or `url`.");
-      if (!await currentToken()) throw new NotSignedInError();
+      const signedIn = !!await currentToken();
       const { bytes, filename } = await loadReplayBytes(args, extra.signal);
       const isBw = filename.toLowerCase().endsWith(".rep");
       if (!isBw && !(bytes.length >= 64 && bytes.subarray(0, 3).toString("latin1") === "MPQ")) {
         return fail(`${filename} isn't a StarCraft II replay (expected an .SC2Replay file).`);
       }
       const form = multipart("replay", filename, bytes);
-      const res = await request(isBw ? "/api/parse-bw" : "/api/parse", {
+      const res = await request(isBw ? "/api/parse-bw" : "/api/parse?summary=1", {
         method: "POST",
         body: new Uint8Array(form.body),
         headers: { "Content-Type": form.contentType, "Content-Length": String(form.body.length) },
-        signal: extra.signal
+        signal: extra.signal,
+        auth: signedIn
       });
       if (!res.ok) throw await errorFrom(res);
       const parsed = await res.json();
       if (!parsed.id) return fail("The site parsed the replay but didn't return an id.");
+      if (!signedIn) {
+        const who = (parsed.players ?? []).map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}${p.result ? `, ${p.result}` : ""}`).join(" vs ");
+        return text(
+          `Uploaded ${filename}${parsed.duplicate ? " (it was already on the site)" : ""}.
+Replay ${parsed.id}${parsed.map ? ` \xB7 ${parsed.map}` : ""}${who ? ` \xB7 ${who}` : ""}
+Web page: ${parsed.url ?? ""}
+
+Uploaded anonymously: it isn't linked to an account. To link it, and to use the AI Coach, call login and upload again.`,
+          { replayId: parsed.id, url: parsed.url ?? null, anonymous: true }
+        );
+      }
       const fileHash = createHash2("sha256").update(bytes).digest("hex");
       await postJson("/api/replays/claim", { id: parsed.id, fileHash }).catch(() => null);
       const summary = await getReplay(parsed.id);

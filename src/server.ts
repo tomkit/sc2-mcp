@@ -273,7 +273,7 @@ export function createServer(): McpServer {
     {
       instructions:
         "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. " +
-        "Every tool except `login` needs the user to be signed in; if a tool says they aren't, call `login`. " +
+        "Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. " +
         "Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions " +
         "about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless " +
         "`confirm_spend` is true — ask the user first and only set it after they agree. When the user mentions one of their " +
@@ -431,8 +431,8 @@ export function createServer(): McpServer {
       title: "Upload a replay",
       description:
         "Upload a StarCraft II replay (.SC2Replay) — or a Brood War .rep — to StarCraft2.ai from a local file path or a download URL. " +
-        "The site parses it and it is attributed to the signed-in user. Returns the replay id and whether an AI Coach report " +
-        "already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\…\\Replays\\Multiplayer; " +
+        "Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the " +
+        "replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\…\\Replays\\Multiplayer; " +
         "on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/…/Replays/Multiplayer.",
       inputSchema: {
         path: z.string().min(1).optional().describe("Local path to the replay file (~ is expanded)."),
@@ -442,22 +442,40 @@ export function createServer(): McpServer {
     },
     guarded(async (args: { path?: string; url?: string }, extra) => {
       if (!!args.path === !!args.url) return fail("Give exactly one of `path` or `url`.");
-      if (!(await currentToken())) throw new NotSignedInError();
+      const signedIn = !!(await currentToken());
       const { bytes, filename } = await loadReplayBytes(args, extra.signal);
       const isBw = filename.toLowerCase().endsWith(".rep");
       if (!isBw && !(bytes.length >= 64 && bytes.subarray(0, 3).toString("latin1") === "MPQ")) {
         return fail(`${filename} isn't a StarCraft II replay (expected an .SC2Replay file).`);
       }
       const form = multipart("replay", filename, bytes);
-      const res = await request(isBw ? "/api/parse-bw" : "/api/parse", {
+      // Uploading needs no account; ?summary=1 asks for a small answer
+      // instead of the multi-megabyte parse the website renders.
+      const res = await request(isBw ? "/api/parse-bw" : "/api/parse?summary=1", {
         method: "POST",
         body: new Uint8Array(form.body),
         headers: { "Content-Type": form.contentType, "Content-Length": String(form.body.length) },
         signal: extra.signal,
+        auth: signedIn,
       });
       if (!res.ok) throw await errorFrom(res);
-      const parsed = (await res.json()) as { id?: string };
+      const parsed = (await res.json()) as {
+        id?: string;
+        url?: string;
+        map?: string;
+        players?: Array<{ name: string | null; race: string | null; result: string | null }>;
+        duplicate?: boolean;
+      };
       if (!parsed.id) return fail("The site parsed the replay but didn't return an id.");
+      if (!signedIn) {
+        const who = (parsed.players ?? []).map((p) => `${p.name}${p.race ? ` (${p.race})` : ""}${p.result ? `, ${p.result}` : ""}`).join(" vs ");
+        return text(
+          `Uploaded ${filename}${parsed.duplicate ? " (it was already on the site)" : ""}.\n` +
+            `Replay ${parsed.id}${parsed.map ? ` · ${parsed.map}` : ""}${who ? ` · ${who}` : ""}\nWeb page: ${parsed.url ?? ""}\n\n` +
+            `Uploaded anonymously: it isn't linked to an account. To link it, and to use the AI Coach, call login and upload again.`,
+          { replayId: parsed.id, url: parsed.url ?? null, anonymous: true },
+        );
+      }
       // The production parser has no session; attribution is a separate
       // claim that proves possession with the file's SHA-256.
       const fileHash = createHash("sha256").update(bytes).digest("hex");

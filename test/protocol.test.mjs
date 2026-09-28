@@ -4,7 +4,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -64,6 +64,14 @@ before(async () => {
         return json(200, { access_token: TOKEN, token_type: "Bearer", expires_in: 3600 });
       });
       return;
+    }
+    if (url.pathname === "/api/parse") {
+      state.lastUploadAuth = req.headers.authorization;
+      state.lastUploadQuery = url.search;
+      req.resume();
+      return req.on("end", () =>
+        json(200, { id: "33333333-2222-3333-4444-555555555555", url: `${base}/en/replay/33333333`, map: "Test LE", players: [{ name: "Alice", race: "Protoss", result: "Win" }], duplicate: false }),
+      );
     }
     if (req.headers.authorization !== `Bearer ${TOKEN}`) { state.unauthorized++; return json(401, { error: "Not authenticated" }); }
     if (url.pathname === "/api/me") return json(200, { minerals: state.minerals, profileName: null, profileRegion: null, emailVerified: true, tokenCanSpend: state.canSpend });
@@ -262,6 +270,29 @@ test("a game the user only coached is labelled as not theirs", async () => {
     assert.match(r.content[0].text, /NOT a game the user played \(you ran the coach\)/);
   } finally {
     state.extraNotMine = false;
+  }
+});
+
+test("upload_replay works without signing in and says it's anonymous", async () => {
+  const anon = new Client({ name: "anon-upload", version: "1.0.0" });
+  await anon.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [new URL("../dist/index.js", import.meta.url).pathname],
+      env: { ...process.env, SC2_API_BASE: base, SC2_API_TOKEN: "", SC2_MCP_NO_BROWSER: "1", SC2_MCP_CREDENTIALS: join(credDir, "anon.json") },
+    }),
+  );
+  try {
+    const file = join(credDir, "game.SC2Replay");
+    writeFileSync(file, Buffer.concat([Buffer.from("MPQ\x1b"), Buffer.alloc(200)]));
+    const r = await anon.callTool({ name: "upload_replay", arguments: { path: file } });
+    assert.ok(!r.isError, r.content[0].text);
+    assert.equal(r.structuredContent.anonymous, true);
+    assert.match(r.content[0].text, /Uploaded anonymously/);
+    assert.equal(state.lastUploadAuth, undefined, "no token sent");
+    assert.equal(state.lastUploadQuery, "?summary=1");
+  } finally {
+    await anon.close();
   }
 });
 
