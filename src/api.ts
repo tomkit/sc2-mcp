@@ -78,7 +78,12 @@ export async function postJson<T>(path: string, payload: unknown, opts: RequestO
 // ---- Site types (the subset this server reads) ----
 
 export interface Me {
+  /** Purchased (blue) minerals. */
   minerals: number;
+  /** What a spend can use now: blue plus coach-plan (gold) minerals (absent on old sites). */
+  spendable?: number;
+  subMinerals?: number;
+  subPlan?: string | null;
   profileName: string | null;
   profileRegion: string | null;
   emailVerified: boolean;

@@ -58,6 +58,13 @@ async function confirmSpend(server: McpServer, flag: boolean | undefined, questi
   }
 }
 
+
+/** /api/me with `minerals` meaning what can be spent now (blue + plan gold). */
+async function getMe(): Promise<Me> {
+  const me = await getJson<Me>("/api/me");
+  return typeof me.spendable === "number" ? { ...me, minerals: me.spendable } : me;
+}
+
 function text(body: string, structured?: Record<string, unknown>): CallToolResult {
   return { content: [{ type: "text", text: body }], ...(structured ? { structuredContent: structured } : {}) };
 }
@@ -308,7 +315,7 @@ export function createServer(): McpServer {
       const existing = await currentToken();
       if (existing) {
         try {
-          const me = await getJson<Me>("/api/me");
+          const me = await getMe();
           return text(`Already signed in to StarCraft2.ai${existing.source === "env" ? " (token from SC2_API_TOKEN)" : ""}. Mineral balance: ${me.minerals}.`);
         } catch (e) {
           if (!(e instanceof ApiError && e.status === 401)) throw e;
@@ -340,7 +347,7 @@ export function createServer(): McpServer {
         });
       }
       if (flow.error) return fail(flow.error);
-      const me = await getJson<Me>("/api/me");
+      const me = await getMe();
       return text(`Signed in to StarCraft2.ai. Mineral balance: ${me.minerals}.`, { status: "signed_in", minerals: me.minerals });
     }),
   );
@@ -377,7 +384,7 @@ export function createServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     guarded(async () => {
-      const me = await getJson<Me>("/api/me");
+      const me = await getMe();
       const profile = me.profileName ? `${me.profileName} (${me.profileRegion ?? "?"})` : "none claimed";
       return text(
         `Minerals: ${me.minerals}\nSC2 profile: ${profile}\n` +
@@ -683,7 +690,7 @@ export function createServer(): McpServer {
           if (upgrade && summary.analysis && outdated) {
             run = startRun(summary.id, { language: language ?? summary.analysisLanguage ?? "en", regenerate: true });
           } else {
-            const me = await getJson<Me>("/api/me");
+            const me = await getMe();
             if (me.tokenCanSpend === false) return fail(spendOffText());
             if (me.minerals < COACH_PRICE) {
               return fail(`Running the AI Coach costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
@@ -782,7 +789,7 @@ export function createServer(): McpServer {
           questionsRemaining: left,
         });
       }
-      const me = await getJson<Me>("/api/me");
+      const me = await getMe();
       if (me.tokenCanSpend === false) return fail(spendOffText());
       if (me.minerals < 1) return fail(`The balance is 0 minerals. The user can buy minerals at ${billingUrl()}.`);
       const gate = await confirmSpend(server, confirm_spend, `Spend 1 mineral for 20 more questions on ${summary.map ?? "this replay"}? Your balance is ${me.minerals}.`);

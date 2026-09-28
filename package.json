@@ -1,6 +1,6 @@
 {
   "name": "sc2-mcp",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "MCP server for StarCraft2.ai: ask StarCraft II questions, upload replays, run the AI Coach and ask follow-up questions from any MCP client.",
   "license": "MIT",
   "type": "module",

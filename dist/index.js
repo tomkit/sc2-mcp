@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.8.0";
+var SERVER_VERSION = "0.8.1";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21908,6 +21908,10 @@ async function confirmSpend(server, flag, question) {
     return "declined";
   }
 }
+async function getMe() {
+  const me = await getJson("/api/me");
+  return typeof me.spendable === "number" ? { ...me, minerals: me.spendable } : me;
+}
 function text(body, structured) {
   return { content: [{ type: "text", text: body }], ...structured ? { structuredContent: structured } : {} };
 }
@@ -22099,7 +22103,7 @@ function createServer2() {
       const existing = await currentToken();
       if (existing) {
         try {
-          const me2 = await getJson("/api/me");
+          const me2 = await getMe();
           return text(`Already signed in to StarCraft2.ai${existing.source === "env" ? " (token from SC2_API_TOKEN)" : ""}. Mineral balance: ${me2.minerals}.`);
         } catch (e) {
           if (!(e instanceof ApiError && e.status === 401)) throw e;
@@ -22134,7 +22138,7 @@ Once they say they've approved, call login again (or any other tool) to continue
         });
       }
       if (flow.error) return fail(flow.error);
-      const me = await getJson("/api/me");
+      const me = await getMe();
       return text(`Signed in to StarCraft2.ai. Mineral balance: ${me.minerals}.`, { status: "signed_in", minerals: me.minerals });
     })
   );
@@ -22169,7 +22173,7 @@ Once they say they've approved, call login again (or any other tool) to continue
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     guarded(async () => {
-      const me = await getJson("/api/me");
+      const me = await getMe();
       const profile = me.profileName ? `${me.profileName} (${me.profileRegion ?? "?"})` : "none claimed";
       return text(
         `Minerals: ${me.minerals}
@@ -22410,7 +22414,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
           if (upgrade && summary.analysis && outdated) {
             run = startRun(summary.id, { language: language ?? summary.analysisLanguage ?? "en", regenerate: true });
           } else {
-            const me = await getJson("/api/me");
+            const me = await getMe();
             if (me.tokenCanSpend === false) return fail(spendOffText());
             if (me.minerals < COACH_PRICE) {
               return fail(`Running the AI Coach costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
@@ -22502,7 +22506,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
           questionsRemaining: left
         });
       }
-      const me = await getJson("/api/me");
+      const me = await getMe();
       if (me.tokenCanSpend === false) return fail(spendOffText());
       if (me.minerals < 1) return fail(`The balance is 0 minerals. The user can buy minerals at ${billingUrl()}.`);
       const gate = await confirmSpend(server, confirm_spend, `Spend 1 mineral for 20 more questions on ${summary.map ?? "this replay"}? Your balance is ${me.minerals}.`);
