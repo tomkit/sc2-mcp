@@ -73,7 +73,13 @@ export function currentLogin(): LoginFlow | null {
   return active && !active.settled ? active : null;
 }
 
-export async function startLogin(): Promise<LoginFlow> {
+/**
+ * @param openBrowser open the approval page in this computer's browser.
+ *   Off by default: the user is often not at this computer (a chat
+ *   assistant on a Mac mini, an SSH box), and a sign-in page left open on
+ *   an unattended screen helps no one. The code path works from anywhere.
+ */
+export async function startLogin(openBrowser = false): Promise<LoginFlow> {
   const pending = currentLogin();
   if (pending) return pending;
 
@@ -174,7 +180,7 @@ export async function startLogin(): Promise<LoginFlow> {
   }
 
   flow.device = await startDeviceLogin(flow, settle);
-  openInBrowser(flow.url);
+  if (openBrowser) openInBrowser(flow.url);
   return flow;
 }
 

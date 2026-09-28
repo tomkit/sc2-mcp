@@ -180,6 +180,10 @@ test("login offers a code for another device, and signs in once it's approved th
     assert.equal(pending.structuredContent.verification_uri, `${base}/auth/device`);
     // The code is never folded into the address.
     assert.ok(!pending.structuredContent.verification_uri.includes("BCDF"));
+    // Code first, and a hands-off instruction to the assistant.
+    assert.match(pending.content[0].text, /Go to .*\/auth\/device/);
+    assert.match(pending.content[0].text, /Enter the code BCDF-GHJK/);
+    assert.doesNotMatch(pending.content[0].text, /browser window opened/);
     await new Promise((r) => setTimeout(r, 1500));
     assert.ok(state.devicePolls >= 1, "polls while waiting");
     state.deviceApproved = true;
@@ -233,6 +237,7 @@ test("with spending off for this connection, paid tools refuse before asking and
     const r = await client.callTool({ name: "analyze_replay", arguments: { replay: REPLAY, confirm_spend: true } });
     assert.ok(r.isError);
     assert.match(r.content[0].text, /turned off for this connection/);
+    assert.match(r.content[0].text, /Do NOT open the link/);
     assert.match(r.content[0].text, /\/auth\/mcp/);
     assert.equal(state.analyzeCalls, 0);
     const acct = await client.callTool({ name: "get_account", arguments: {} });

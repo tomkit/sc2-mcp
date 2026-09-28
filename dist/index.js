@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.5.0";
+var SERVER_VERSION = "0.6.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21645,7 +21645,7 @@ var PAGE = (title, body) => `<!doctype html><meta charset="utf-8"><title>${title
 function currentLogin() {
   return active && !active.settled ? active : null;
 }
-async function startLogin() {
+async function startLogin(openBrowser = false) {
   const pending = currentLogin();
   if (pending) return pending;
   const verifier = b64url(randomBytes(32));
@@ -21732,7 +21732,7 @@ async function startLogin() {
     else resolveDone();
   }
   flow.device = await startDeviceLogin(flow, settle);
-  openInBrowser(flow.url);
+  if (openBrowser) openInBrowser(flow.url);
   return flow;
 }
 async function startDeviceLogin(flow, settle) {
@@ -21918,7 +21918,7 @@ function billingUrl() {
   return `${apiBase()}/en/billing`;
 }
 function spendOffText() {
-  return `Spending minerals is turned off for this connection, so nothing was charged. The user can turn it on at ${apiBase()}/auth/mcp (Connected apps \u2192 Allow spending), then ask again.`;
+  return `Spending minerals is turned off for this connection, so nothing was charged. Only the user can turn it on, themselves, on their own phone or computer: send them this link \u2014 ${apiBase()}/auth/mcp \u2014 and tell them to sign in again when asked, then tap "Allow spending" next to this app. Do NOT open the link, sign in, or click anything for them (the site requires a fresh sign-in by the user for exactly this reason). Ask again once they say it's done.`;
 }
 function describeError(e) {
   if (e instanceof NotSignedInError) return fail(e.message);
@@ -22089,13 +22089,14 @@ function createServer2() {
     "login",
     {
       title: "Sign in to StarCraft2.ai",
-      description: "Sign in to the user's StarCraft2.ai account. Required before any other tool. Opens the site's approval page in this computer's browser, and also returns a short code the user can enter on any other device (e.g. their phone) at the returned verification address \u2014 relay the address and the code to the user exactly as given, as two separate pieces. Whichever they finish first signs in. Call again after they've approved to continue.",
+      description: "Sign in to the user's StarCraft2.ai account. Required before any other tool. Returns a verification address and a short code: send both to the user exactly as given, as two separate pieces, so they can sign in and approve on their own phone or computer. Assume the user is NOT at this computer unless you know they are; never open the page or sign in for them. Set open_browser only when the user is sitting at this machine (e.g. a terminal coding session) and wants a browser window here. Call again after they've approved to continue.",
       inputSchema: {
-        wait_seconds: external_exports.number().int().min(0).max(300).optional().describe("How long to wait for the user to finish in the browser (default 45).")
+        wait_seconds: external_exports.number().int().min(0).max(300).optional().describe("How long to wait for the user to approve (default 45)."),
+        open_browser: external_exports.boolean().optional().describe("Also open the approval page in this computer's browser. Only when the user is at this computer.")
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
     },
-    guarded(async ({ wait_seconds }, extra) => {
+    guarded(async ({ wait_seconds, open_browser }, extra) => {
       const existing = await currentToken();
       if (existing) {
         try {
@@ -22107,7 +22108,7 @@ function createServer2() {
           await forgetToken();
         }
       }
-      const flow = await startLogin();
+      const flow = await startLogin(open_browser === true);
       const report = progressReporter(extra);
       const deadline = Date.now() + (wait_seconds ?? 45) * 1e3;
       while (!flow.settled && Date.now() < deadline && !extra.signal.aborted) {
@@ -22116,21 +22117,22 @@ function createServer2() {
         }), new Promise((r) => setTimeout(r, 3e3))]);
       }
       if (!flow.settled) {
-        const device = flow.device ? `
+        const onThisComputer = open_browser ? `
 
-From a phone or any other device: go to ${flow.device.verificationUri} and enter the code ${flow.device.userCode} (valid for 10 minutes). Tell the user to enter it only because they asked to connect their assistant.` : "";
-        return text(
-          `Waiting for the user to approve. On this computer, a browser window opened; if it didn't, they can open:
-${flow.url}${device}
+If the user is at this computer, a browser window opened here too; if it didn't, the page is:
+${flow.url}` : "";
+        const lead = flow.device ? `Send the user these two things so they can connect their StarCraft2.ai account from their own phone or computer:
+1. Go to ${flow.device.verificationUri}
+2. Enter the code ${flow.device.userCode}
+(They sign in there themselves; the code works for 10 minutes. They should only enter it because they asked to connect.)` : `Ask the user to open this page on this computer and approve: ${flow.url}`;
+        return text(`${lead}${onThisComputer}
 
-Once they've approved, call login again (or any other tool) to continue.`,
-          {
-            status: "pending",
-            url: flow.url,
-            verification_uri: flow.device?.verificationUri ?? null,
-            user_code: flow.device?.userCode ?? null
-          }
-        );
+Once they say they've approved, call login again (or any other tool) to continue.`, {
+          status: "pending",
+          url: flow.url,
+          verification_uri: flow.device?.verificationUri ?? null,
+          user_code: flow.device?.userCode ?? null
+        });
       }
       if (flow.error) return fail(flow.error);
       const me = await getJson("/api/me");

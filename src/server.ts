@@ -72,8 +72,11 @@ function billingUrl(): string {
 
 function spendOffText(): string {
   return (
-    `Spending minerals is turned off for this connection, so nothing was charged. The user can turn it on at ` +
-    `${apiBase()}/auth/mcp (Connected apps → Allow spending), then ask again.`
+    `Spending minerals is turned off for this connection, so nothing was charged. Only the user can turn it on, ` +
+    `themselves, on their own phone or computer: send them this link — ${apiBase()}/auth/mcp — and tell them to sign ` +
+    `in again when asked, then tap "Allow spending" next to this app. Do NOT open the link, sign in, or click ` +
+    `anything for them (the site requires a fresh sign-in by the user for exactly this reason). Ask again once they ` +
+    `say it's done.`
   );
 }
 
@@ -282,16 +285,21 @@ export function createServer(): McpServer {
     {
       title: "Sign in to StarCraft2.ai",
       description:
-        "Sign in to the user's StarCraft2.ai account. Required before any other tool. Opens the site's approval page in " +
-        "this computer's browser, and also returns a short code the user can enter on any other device (e.g. their phone) " +
-        "at the returned verification address — relay the address and the code to the user exactly as given, as two separate " +
-        "pieces. Whichever they finish first signs in. Call again after they've approved to continue.",
+        "Sign in to the user's StarCraft2.ai account. Required before any other tool. Returns a verification address and a " +
+        "short code: send both to the user exactly as given, as two separate pieces, so they can sign in and approve on " +
+        "their own phone or computer. Assume the user is NOT at this computer unless you know they are; never open " +
+        "the page or sign in for them. Set open_browser only when the user is sitting at this machine (e.g. a " +
+        "terminal coding session) and wants a browser window here. Call again after they've approved to continue.",
       inputSchema: {
-        wait_seconds: z.number().int().min(0).max(300).optional().describe("How long to wait for the user to finish in the browser (default 45)."),
+        wait_seconds: z.number().int().min(0).max(300).optional().describe("How long to wait for the user to approve (default 45)."),
+        open_browser: z
+          .boolean()
+          .optional()
+          .describe("Also open the approval page in this computer's browser. Only when the user is at this computer."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    guarded(async ({ wait_seconds }: { wait_seconds?: number }, extra) => {
+    guarded(async ({ wait_seconds, open_browser }: { wait_seconds?: number; open_browser?: boolean }, extra) => {
       const existing = await currentToken();
       if (existing) {
         try {
@@ -303,7 +311,7 @@ export function createServer(): McpServer {
           await forgetToken();
         }
       }
-      const flow = await startLogin();
+      const flow = await startLogin(open_browser === true);
       const report = progressReporter(extra);
       const deadline = Date.now() + (wait_seconds ?? 45) * 1000;
       while (!flow.settled && Date.now() < deadline && !extra.signal.aborted) {
@@ -311,20 +319,20 @@ export function createServer(): McpServer {
         await Promise.race([flow.done.catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
       }
       if (!flow.settled) {
-        const device = flow.device
-          ? `\n\nFrom a phone or any other device: go to ${flow.device.verificationUri} and enter the code ${flow.device.userCode} ` +
-            `(valid for 10 minutes). Tell the user to enter it only because they asked to connect their assistant.`
+        const onThisComputer = open_browser
+          ? `\n\nIf the user is at this computer, a browser window opened here too; if it didn't, the page is:\n${flow.url}`
           : "";
-        return text(
-          `Waiting for the user to approve. On this computer, a browser window opened; if it didn't, they can open:\n${flow.url}` +
-            `${device}\n\nOnce they've approved, call login again (or any other tool) to continue.`,
-          {
-            status: "pending",
-            url: flow.url,
-            verification_uri: flow.device?.verificationUri ?? null,
-            user_code: flow.device?.userCode ?? null,
-          },
-        );
+        const lead = flow.device
+          ? `Send the user these two things so they can connect their StarCraft2.ai account from their own phone or computer:\n` +
+            `1. Go to ${flow.device.verificationUri}\n2. Enter the code ${flow.device.userCode}\n` +
+            `(They sign in there themselves; the code works for 10 minutes. They should only enter it because they asked to connect.)`
+          : `Ask the user to open this page on this computer and approve: ${flow.url}`;
+        return text(`${lead}${onThisComputer}\n\nOnce they say they've approved, call login again (or any other tool) to continue.`, {
+          status: "pending",
+          url: flow.url,
+          verification_uri: flow.device?.verificationUri ?? null,
+          user_code: flow.device?.userCode ?? null,
+        });
       }
       if (flow.error) return fail(flow.error);
       const me = await getJson<Me>("/api/me");
