@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const SERVER_NAME = "sc2-mcp";
-export const SERVER_VERSION = "0.8.1";
+export const SERVER_VERSION = "0.9.0";
 
 /** The StarCraft2.ai origin every request goes to. Override for local testing. */
 export function apiBase(): string {

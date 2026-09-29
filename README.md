@@ -14,6 +14,7 @@ Uploading works without an account. Everything else needs a StarCraft2.ai accoun
 | Knowledge search, uploads, reading an existing report | free |
 | AI Coach report on a replay | 1 mineral (free if the replay already has one) |
 | Follow-up questions on a replay | first 3 free, then 1 mineral per 20 |
+| Check-in note across your recent games | reading the saved one is free; a new one is 1 mineral |
 
 **A new connection can't spend minerals at all until you allow it** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp) under Connected apps, so a sign-in someone tricked you into approving can read but not spend. Once allowed, a tool still never spends unless it's called with `confirm_spend: true`, and the tool descriptions tell the assistant to ask you first. If your client supports MCP elicitation, the server also asks you directly before spending, so nothing the assistant reads in a replay or a report can approve a purchase for you. Buy minerals at [starcraft2.ai/en/billing](https://www.starcraft2.ai/en/billing).
 
@@ -83,11 +84,12 @@ You can also set `SC2_API_TOKEN` in the server's environment; it takes precedenc
 | `search_sc2_knowledge` | Passages from the SC2 knowledge base for general questions |
 | `upload_replay` | Upload a `.SC2Replay` (or Brood War `.rep`) by `path` or `url`. Works without signing in (anonymous upload) |
 | `list_my_replays` | Your games, newest first: ones you played (via your linked SC2 profile), coached, asked about or uploaded, with your result and whether a report exists |
-| `search_replays` | Search your games (or another player's, by name) by date range, map, opponent, your race, opponent's race, win/loss, 1v1/2v2 and whether a report exists |
+| `search_replays` | Search your games (or another player's, by name) by date range, map, opponent, teammates, units built (e.g. at least 8 Liberators and Vikings), your race, opponent's race, win/loss, 1v1/2v2 and whether a report exists. Each result has its link |
 | `get_analysis` | A replay's details and its AI Coach report, if one exists |
 | `analyze_replay` | Run the AI Coach (1 mineral, needs `confirm_spend`) |
 | `ask_about_replay` | Ask the coach a follow-up question about a coached replay |
 | `unlock_more_questions` | 20 more follow-up questions on a replay (1 mineral, needs `confirm_spend`) |
+| `coach_my_progress` | The coach's check-in note across your last 5 coached ranked (or unranked) games: are you fixing what it flagged last time, what's working, the one recurring leak, and what to work on next, citing the games. The saved note is free; a new one is 1 mineral (`refresh` + `confirm_spend`) |
 
 A coach run takes 3–7 minutes. `analyze_replay` waits up to `wait_seconds` (default 50) and sends MCP progress notifications while it waits. If the run isn't done by then it returns and the run carries on; `get_analysis` picks up the report. Runs that fail on the site's side are refunded automatically.
 

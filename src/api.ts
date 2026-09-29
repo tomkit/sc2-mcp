@@ -121,6 +121,14 @@ export interface MyReplay extends ReplaySummary {
   you: { name: string | null; race: string | null; result: string | null } | null;
   /** The searched player's slot (the user, or the player searched for). */
   player?: { name: string | null; race: string | null; result: string | null } | null;
+  /** With a `units` search: how many of each the searched player built. */
+  units?: Record<string, number>;
+}
+
+/** When a search finds nothing and named someone the site doesn't know. */
+export interface SearchHints {
+  unknown: Array<{ name: string; similar: string[] }>;
+  frequentTeammates: Array<{ name: string; games: number }>;
 }
 
 export interface AiAnalysis {

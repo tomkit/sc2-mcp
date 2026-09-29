@@ -21444,7 +21444,7 @@ var EMPTY_COMPLETION_RESULT = {
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.8.1";
+var SERVER_VERSION = "0.9.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21887,6 +21887,108 @@ async function waitForRun(run, ms, onTick, signal) {
   return run.settled;
 }
 
+// src/progress-note.ts
+var runs2 = /* @__PURE__ */ new Map();
+function noteKey(region, name, category) {
+  return `${region}/${name.toLowerCase()}/${category}`;
+}
+function getNoteRun(key) {
+  return runs2.get(key);
+}
+function getNote(region, name, category, signal) {
+  const q = new URLSearchParams({ region, name, category });
+  return (async () => {
+    const res = await request(`/api/profile-coach?${q}`, { signal });
+    if (!res.ok) throw await errorFrom(res);
+    return await res.json();
+  })();
+}
+function startNoteRun(args) {
+  const key = noteKey(args.region, args.name, args.category);
+  const existing = runs2.get(key);
+  if (existing && !existing.settled) return existing;
+  const run = { key, startedAt: Date.now(), done: Promise.resolve(), settled: false, note: null, error: null, delivered: false };
+  run.done = (async () => {
+    try {
+      const res = await request("/api/profile-coach", {
+        method: "POST",
+        // A free rewrite says so: if newer games turned up since we looked,
+        // the site refuses (WOULD_CHARGE) instead of charging unconfirmed.
+        body: JSON.stringify({
+          region: args.region,
+          name: args.name,
+          category: args.category,
+          language: args.language,
+          ...args.free ? { maxCharge: 0 } : {}
+        }),
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson, application/json" }
+      });
+      if (!(res.headers.get("content-type") ?? "").includes("ndjson")) {
+        if (!res.ok) throw await errorFrom(res);
+        run.note = await res.json();
+        return;
+      }
+      const final = await readFinal(res);
+      const status = typeof final.httpStatus === "number" ? final.httpStatus : 200;
+      if (status >= 400) {
+        throw new ApiError(status, typeof final.code === "string" ? final.code : null, String(final.error ?? "The check-in note failed"), final);
+      }
+      run.note = final;
+    } catch (e) {
+      run.error = e instanceof Error ? e : new Error(String(e));
+    } finally {
+      run.settled = true;
+    }
+  })();
+  runs2.set(key, run);
+  return run;
+}
+async function readFinal(res) {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("The response had no body");
+  const decoder = new TextDecoder();
+  let buf = "";
+  let final = null;
+  for (; ; ) {
+    const { value, done } = await reader.read();
+    if (value) buf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const frame = JSON.parse(line);
+        if (frame.t === "final" && frame.body) final = frame.body;
+      } catch {
+      }
+    }
+    if (done) break;
+  }
+  if (!final) throw new Error("The check-in note stream ended without a result");
+  return final;
+}
+async function waitForNote(run, ms, onTick, signal) {
+  const deadline = Date.now() + ms;
+  while (!run.settled) {
+    const left = deadline - Date.now();
+    if (left <= 0 || signal?.aborted) return run.settled;
+    await Promise.race([run.done, new Promise((r) => setTimeout(r, Math.min(1e4, left)))]);
+    if (!run.settled) onTick(Math.round((Date.now() - run.startedAt) / 1e3));
+  }
+  return true;
+}
+function formatNote(note, base, locale = "en") {
+  const header = `Check-in note, ${note.category} games${note.generatedAt ? ` (written ${note.generatedAt.slice(0, 10)})` : ""}:`;
+  const refs = note.summaryReplays.map((g, i) => `[${i + 1}] ${g.map}${g.playedAt ? `, ${g.playedAt.slice(0, 10)}` : ""} \u2014 ${base}/${locale}/replay/${g.slug}?tab=coach`).join("\n");
+  return `${header}
+
+${note.summary ?? ""}
+
+Games cited (a citation like [2@5:15] is game 2 at 5:15):
+${refs}`;
+}
+
 // src/server.ts
 var COACH_PRICE = 1;
 var CONFIRM_DESCRIPTION = "Set to true ONLY after the user has explicitly agreed, in this conversation, to spend 1 mineral on this. Never set it on your own initiative.";
@@ -21911,6 +22013,9 @@ async function confirmSpend(server, flag, question) {
 async function getMe() {
   const me = await getJson("/api/me");
   return typeof me.spendable === "number" ? { ...me, minerals: me.spendable } : me;
+}
+function confirm_spend_or(args) {
+  return args.refresh ? args.confirm_spend : void 0;
 }
 function text(body, structured) {
   return { content: [{ type: "text", text: body }], ...structured ? { structuredContent: structured } : {} };
@@ -22022,7 +22127,8 @@ function replayLine(r, me = true) {
   const slot = r.player ?? r.you;
   const who = slot ? ` \xB7 ${me ? "you played" : "player"}: ${slot.name}${slot.race ? ` (${slot.race})` : ""}${slot.result ? `, ${slot.result}` : ""}` : me ? ` \xB7 NOT a game the user played (${r.relations.filter((x) => x !== "played").map((x) => RELATION_LABEL[x]).join(", ") || "linked"})` : "";
   const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
-  return `- ${r.id} \xB7 ${when ? `${when} \xB7 ` : ""}${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""}${who} \xB7 ${report}`;
+  const built = r.units && Object.keys(r.units).length ? ` \xB7 built: ${Object.entries(r.units).map(([u, n]) => `${n} ${u}`).join(", ")}` : "";
+  return `- ${r.id} \xB7 ${when ? `${when} \xB7 ` : ""}${r.map ?? "?"} \xB7 ${players}${r.duration ? ` \xB7 ${r.duration}` : ""}${who}${built} \xB7 ${report}${r.url ? ` \xB7 ${r.url}` : ""}`;
 }
 function runStatusText(run, r) {
   const secs = Math.round((Date.now() - run.startedAt) / 1e3);
@@ -22085,7 +22191,7 @@ function createServer2() {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "StarCraft II AI Coach (StarCraft2.ai)" },
     {
-      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June') use `search_replays`. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
+      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June', 'games I played with Sirry where I went mass Liberators') use `search_replays` \u2014 it filters by teammates and by units built in one call, so never open games one by one to check a build. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. When the user asks whether they're improving, what they keep doing wrong across games, or what to work on, use `coach_my_progress` (the saved check-in note is free; a new one costs 1 mineral). Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
     }
   );
   server.registerTool(
@@ -22272,18 +22378,20 @@ ${next}`, {
   async function runSearch(params, emptyHint) {
     const qs = new URLSearchParams({ search: "1" });
     for (const [k, v] of Object.entries(params)) {
-      if (v === void 0 || v === "" || v === false) continue;
-      qs.set(k, v === true ? "1" : String(v));
+      if (v === void 0 || v === "" || v === false || Array.isArray(v) && v.length === 0) continue;
+      qs.set(k, v === true ? "1" : Array.isArray(v) ? v.join(",") : String(v));
     }
-    const { replays, profile, player, scope } = await getJson(`/api/mcp/replay?${qs}`);
+    const { replays, profile, player, scope, hints } = await getJson(`/api/mcp/replay?${qs}`);
     const me = !params.player || String(params.player).toLowerCase() === "me";
     const claimHint = me && !profile ? `
 
 No SC2 profile is linked to this account, so games the user played but never coached, asked about or uploaded aren't included. They can link it under "Set your profile" in the account menu at ${apiBase()}.` : "";
-    const filters = Object.entries(params).filter(([k, v]) => v !== void 0 && v !== "" && v !== false && k !== "limit" && k !== "player" && k !== "include").map(([k, v]) => v === true ? k : `${k}=${v}`).join(", ");
+    const filters = Object.entries(params).filter(([k, v]) => v !== void 0 && v !== "" && v !== false && !(Array.isArray(v) && v.length === 0) && k !== "limit" && k !== "player" && k !== "include").map(([k, v]) => v === true ? k : `${k}=${Array.isArray(v) ? v.join(", ") : v}`).join(", ");
     const who = me ? scope === "all" ? `games ${profile ? `${profile.name} (${profile.region.toUpperCase()}) played, ` : ""}coached, asked about or uploaded` : scope === "linked" ? "games this account coached, asked about or uploaded (no SC2 profile is linked, so games the user played can't be identified)" : `games ${profile ? `${profile.name} (${profile.region.toUpperCase()})` : "the user"} played` : `games ${player?.name ?? params.player} played`;
     if (replays.length === 0) {
-      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player, scope });
+      const nameHint = hints?.unknown.length ? "\n\n" + hints.unknown.map((u) => `No player named "${u.name}" has games on StarCraft2.ai${u.similar.length ? ` (names containing it: ${u.similar.join(", ")})` : ""}.`).join("\n") + (hints.frequentTeammates.length ? `
+${player?.name ?? profile?.name ?? "This player"} plays most often with: ${hints.frequentTeammates.map((t) => `${t.name} (${t.games} games)`).join(", ")}. In-game names can differ from nicknames: ask the user which of these they mean, then search again with that exact name.` : "") : "";
+      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${nameHint}${claimHint}`, { replays: [], profile, player, scope, ...hints ? { hints } : {} });
     }
     const head = `${replays.length} of the ${who}${filters ? `, matching ${filters}` : ""}, newest first:`;
     return text(`${head}
@@ -22316,7 +22424,7 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
     "search_replays",
     {
       title: "Search games",
-      description: "Search StarCraft II games on StarCraft2.ai. By default searches the games the SIGNED-IN USER PLAYED (matched by their linked SC2 profile) \u2014 use it for requests like 'my losses on Rainfall last month', 'my PvZ games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to search their public games instead. Every filter is optional and applied before the limit, so results cover all matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
+      description: "Search StarCraft II games on StarCraft2.ai. By default searches the games the SIGNED-IN USER PLAYED (matched by their linked SC2 profile) \u2014 use it for requests like 'my losses on Rainfall last month', 'my PvZ games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to search their public games instead. Every filter is optional and applied before the limit, so results cover all matching games, newest first. teammates finds games played together ('games tom, Sirry and Dan played' \u2192 teammates: ['Sirry', 'Dan']); units finds games where the searched player built certain units ('where I went mass Liberators and Vikings' \u2192 units: ['Liberator', 'Viking'], min_units: 8) and shows how many of each they built. Use these filters to answer questions about builds and compositions \u2014 do NOT open games one by one with get_analysis to check what someone built. If a name matches nobody, the result lists who the player actually plays with; ask the user which one they mean. Each result carries its link. Returns replay ids for get_analysis / ask_about_replay. Free.",
       inputSchema: {
         player: external_exports.string().max(80).optional().describe("'me' (default) for the signed-in user, or another player's exact in-game name (case-insensitive)."),
         region: external_exports.enum(["na", "eu", "kr", "cn"]).optional().describe("With player: only that player's games on this server."),
@@ -22329,6 +22437,9 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
         result: external_exports.enum(["win", "loss"]).optional().describe("The searched player's result."),
         game_type: external_exports.string().regex(/^\d+v\d+$/).optional().describe("e.g. '1v1', '2v2'."),
         has_report: external_exports.boolean().optional().describe("Only games that already have an AI Coach report (free to re-read)."),
+        teammates: external_exports.array(external_exports.string().min(1).max(40)).max(5).optional().describe("In-game names that must be on the searched player's team (exact, any case)."),
+        units: external_exports.array(external_exports.string().min(1).max(40)).max(5).optional().describe("Units (or buildings) the searched player built, e.g. ['Liberator', 'Viking']; plurals and common nicknames (libs, BCs, lings) work."),
+        min_units: external_exports.number().int().min(1).max(500).optional().describe("With units: at least this many of EACH (default 1). 'Mass' is roughly 8+ for air units, 15+ for cheap ground units."),
         include: external_exports.enum(["played", "all"]).optional().describe("'played' (default): games the user played. 'all': also games they only ran the coach on, asked about or uploaded \u2014 often other people's games."),
         limit: external_exports.number().int().min(1).max(50).optional().describe("How many (default 10).")
       },
@@ -22523,6 +22634,133 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
         minerals: out.newBalance
       });
     })
+  );
+  server.registerTool(
+    "coach_my_progress",
+    {
+      title: "Check-in note: am I improving?",
+      description: `The AI Coach's check-in note across a player's recent coached games in one category (ranked ladder or unranked): whether they're learning from their mistakes, compared with the previous note, what's working, the one recurring leak and what to work on next, citing the games. Defaults to the user's own linked SC2 profile; pass player + region for someone else's public profile. Reading the saved note is free. Writing a new one (when there are newer coached games, or none exists yet) COSTS ${COACH_PRICE} MINERAL and needs refresh: true plus confirm_spend: true \u2014 tell the user the price and balance and get a yes first. It reads the last 5 coached games, so run analyze_replay on recent games first if there are fewer than 2. A new note takes 1\u20132 minutes: this waits up to wait_seconds, then call again to collect it.`,
+      inputSchema: {
+        category: external_exports.enum(["ranked", "unranked"]).optional().describe("ranked (ladder) or unranked games. Default: ranked, or unranked when the player has too few coached ranked games."),
+        player: external_exports.string().min(1).max(64).optional().describe("Another player's in-game name. Omit for the signed-in user's own profile."),
+        region: external_exports.enum(["na", "eu", "kr", "cn"]).optional().describe("Region of `player` (required with it)."),
+        refresh: external_exports.boolean().optional().describe("Write a new note instead of returning the saved one."),
+        confirm_spend: external_exports.boolean().optional().describe(CONFIRM_DESCRIPTION),
+        language: external_exports.enum(COACH_LANGUAGES).optional().describe("Language of a new note (default en)."),
+        wait_seconds: external_exports.number().int().min(0).max(300).optional().describe("Max seconds to wait for a new note before returning (default 50).")
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+    },
+    guarded(
+      async (args, extra) => {
+        let name = args.player;
+        let region = args.region;
+        if (name && !region) return fail("Pass `region` (na, eu, kr or cn) together with `player`.");
+        let me = null;
+        if (!name) {
+          me = await getMe();
+          if (!me.profileName || !me.profileRegion) {
+            return fail(
+              `The user hasn't set their StarCraft II profile on StarCraft2.ai, so there's no way to know which games are theirs. They can set it from the account menu on ${apiBase()} (their in-game name and region), or pass player + region.`
+            );
+          }
+          name = me.profileName;
+          region = me.profileRegion;
+        }
+        const who = args.player ? name : "you";
+        const profileUrl = (c) => `${apiBase()}/en/profiles/${region}/${encodeURIComponent(name)}?games=${c}&tab=coach`;
+        let category = args.category ?? "ranked";
+        let note = await getNote(region, name, category, extra.signal);
+        if (!args.category && note.currentReplays.length < 2 && !note.summary) {
+          const unranked = await getNote(region, name, "unranked", extra.signal);
+          if (unranked.currentReplays.length >= 2 || unranked.summary) {
+            category = "unranked";
+            note = unranked;
+          }
+        }
+        const key = noteKey(region, name, category);
+        let run = getNoteRun(key);
+        if (run && run.settled && !run.delivered) {
+        } else if (!run || run.settled) {
+          const fresh = note.summary && !note.hasNewGames && !note.summaryNeedsRefresh;
+          if (note.summary && (fresh || !args.refresh)) {
+            const newer = note.hasNewGames ? `
+
+(${who === "you" ? "You have" : `${name} has`} newer coached games since this note. A new note costs ${COACH_PRICE} mineral: call again with refresh: true and confirm_spend: true once the user agrees.)` : note.summaryNeedsRefresh ? "\n\n(Written by an older coach version. Call again with refresh: true to rewrite it on the current one for free.)" : "";
+            return text(`${formatNote(note, apiBase())}${newer}
+
+On the site: ${profileUrl(category)}`, {
+              status: "saved",
+              category,
+              spent: 0,
+              hasNewGames: note.hasNewGames
+            });
+          }
+          if (note.currentReplays.length < 2) {
+            return fail(
+              `A check-in note needs at least 2 coached ${category} games and ${who === "you" ? "you have" : `${name} has`} ${note.currentReplays.length}. Run the AI Coach on more ${category} games first (list_my_replays, then analyze_replay).`
+            );
+          }
+          const free = !!note.summary && !note.hasNewGames && note.summaryNeedsRefresh;
+          if (!free) {
+            me = me ?? await getMe();
+            if (me.tokenCanSpend === false) return fail(spendOffText());
+            if (me.minerals < COACH_PRICE) {
+              return fail(`A new check-in note costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
+            }
+            const gate = await confirmSpend(
+              server,
+              confirm_spend_or(args),
+              `Write a new AI Coach check-in note on ${who === "you" ? "your" : `${name}'s`} last ${Math.min(5, note.currentReplays.length)} coached ${category} games for ${COACH_PRICE} mineral? Your balance is ${me.minerals}.`
+            );
+            if (gate === "declined") return text("Not started: the user declined the spend.", { status: "declined" });
+            if (gate === "needs_flag") {
+              return text(
+                `Not started. A new check-in note on the last ${Math.min(5, note.currentReplays.length)} coached ${category} games costs ${COACH_PRICE} mineral; the balance is ${me.minerals}. Ask the user, then call again with refresh: true and confirm_spend: true.`,
+                { status: "confirmation_required", price: COACH_PRICE, minerals: me.minerals, category }
+              );
+            }
+          }
+          run = startNoteRun({ region, name, category, language: args.language ?? "en", free });
+        }
+        const report = progressReporter(extra);
+        const settled = await waitForNote(run, (args.wait_seconds ?? 50) * 1e3, (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
+        if (!settled) {
+          return text(
+            `Still writing the check-in note (${Math.round((Date.now() - run.startedAt) / 1e3)}s so far; it usually takes 1\u20132 minutes). Call coach_my_progress again with the same player and category to collect it \u2014 don't pass refresh again.`,
+            { status: "running", category }
+          );
+        }
+        run.delivered = true;
+        if (run.error) {
+          const e = run.error;
+          if (e instanceof ApiError && e.code === "WOULD_CHARGE") {
+            return text(
+              `Not written: newer coached games turned up, so a new note now costs ${COACH_PRICE} mineral. Ask the user, then call again with refresh: true and confirm_spend: true.`,
+              { status: "confirmation_required", price: COACH_PRICE, category }
+            );
+          }
+          if (e instanceof ApiError && e.status === 409) {
+            const saved = await getNote(region, name, category, extra.signal);
+            return text(`Already up to date \u2014 no newer coached games since the saved note. Nothing was charged.
+
+${formatNote(saved, apiBase())}`, {
+              status: "saved",
+              category,
+              spent: 0
+            });
+          }
+          throw e;
+        }
+        return text(`${formatNote(run.note, apiBase())}
+
+On the site: ${profileUrl(category)}`, {
+          status: "written",
+          category,
+          summaryId: run.note.summaryId
+        });
+      }
+    )
   );
   return server;
 }

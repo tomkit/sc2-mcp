@@ -17,12 +17,14 @@ import {
   type MyReplay,
   type ReplayRelation,
   type ReplaySummary,
+  type SearchHints,
 } from "./api.js";
 import { apiBase, COACH_LANGUAGES, MAX_REPLAY_BYTES, SERVER_NAME, SERVER_VERSION, USER_AGENT } from "./config.js";
 import { currentToken, forgetToken } from "./credentials.js";
 import { formatAnalysis, formatReplayHeader } from "./format.js";
 import { startLogin } from "./login.js";
 import { getRun, progressFraction, startRun, waitForRun, type CoachRun } from "./runs.js";
+import { formatNote, getNote, getNoteRun, noteKey, startNoteRun, waitForNote, type Category } from "./progress-note.js";
 
 type Extra = {
   signal: AbortSignal;
@@ -63,6 +65,11 @@ async function confirmSpend(server: McpServer, flag: boolean | undefined, questi
 async function getMe(): Promise<Me> {
   const me = await getJson<Me>("/api/me");
   return typeof me.spendable === "number" ? { ...me, minerals: me.spendable } : me;
+}
+
+/** confirm_spend only counts on a call that also asks for a new note. */
+function confirm_spend_or(args: { refresh?: boolean; confirm_spend?: boolean }): boolean | undefined {
+  return args.refresh ? args.confirm_spend : undefined;
 }
 
 function text(body: string, structured?: Record<string, unknown>): CallToolResult {
@@ -194,7 +201,10 @@ function replayLine(r: MyReplay, me = true): string {
       ? ` · NOT a game the user played (${r.relations.filter((x) => x !== "played").map((x) => RELATION_LABEL[x]).join(", ") || "linked"})`
       : "";
   const report = r.hasAnalysis ? `report ${r.analysisOutdated ? "(older coach version)" : "ready"}` : "no report";
-  return `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${who} · ${report}`;
+  const built = r.units && Object.keys(r.units).length
+    ? ` · built: ${Object.entries(r.units).map(([u, n]) => `${n} ${u}`).join(", ")}`
+    : "";
+  return `- ${r.id} · ${when ? `${when} · ` : ""}${r.map ?? "?"} · ${players}${r.duration ? ` · ${r.duration}` : ""}${who}${built} · ${report}${r.url ? ` · ${r.url}` : ""}`;
 }
 
 function runStatusText(run: CoachRun, r: ReplaySummary): string {
@@ -285,8 +295,12 @@ export function createServer(): McpServer {
         "about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless " +
         "`confirm_spend` is true — ask the user first and only set it after they agree. When the user mentions one of their " +
         "games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on " +
-        "Rainfall in June') use `search_replays`. Games they played, coached or uploaded before are already there, and an " +
-        "existing report is free to re-read. Knowledge search, uploads and " +
+        "Rainfall in June', 'games I played with Sirry where I went mass Liberators') use `search_replays` — it filters by " +
+        "teammates and by units built in one call, so never open games one by one to check a build. Games they played, coached " +
+        "or uploaded before are already there, and an " +
+        "existing report is free to re-read. When the user asks whether they're improving, what they keep doing wrong across " +
+        "games, or what to work on, use `coach_my_progress` (the saved check-in note is free; a new one costs 1 mineral). " +
+        "Knowledge search, uploads and " +
         "reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer " +
         "from the passages it returns, citing their URLs.",
     },
@@ -500,17 +514,18 @@ export function createServer(): McpServer {
   );
 
   /** One call to the site's search, formatted; shared by both listing tools. */
-  async function runSearch(params: Record<string, string | number | boolean | undefined>, emptyHint: string) {
+  async function runSearch(params: Record<string, string | number | boolean | string[] | undefined>, emptyHint: string) {
     const qs = new URLSearchParams({ search: "1" });
     for (const [k, v] of Object.entries(params)) {
-      if (v === undefined || v === "" || v === false) continue;
-      qs.set(k, v === true ? "1" : String(v));
+      if (v === undefined || v === "" || v === false || (Array.isArray(v) && v.length === 0)) continue;
+      qs.set(k, v === true ? "1" : Array.isArray(v) ? v.join(",") : String(v));
     }
-    const { replays, profile, player, scope } = await getJson<{
+    const { replays, profile, player, scope, hints } = await getJson<{
       replays: MyReplay[];
       profile: { name: string; region: string } | null;
       player: { name: string; region: string | null; me: boolean } | null;
       scope?: "played" | "all" | "linked";
+      hints?: SearchHints;
     }>(`/api/mcp/replay?${qs}`);
     const me = !params.player || String(params.player).toLowerCase() === "me";
     const claimHint =
@@ -519,8 +534,8 @@ export function createServer(): McpServer {
           `uploaded aren't included. They can link it under "Set your profile" in the account menu at ${apiBase()}.`
         : "";
     const filters = Object.entries(params)
-      .filter(([k, v]) => v !== undefined && v !== "" && v !== false && k !== "limit" && k !== "player" && k !== "include")
-      .map(([k, v]) => (v === true ? k : `${k}=${v}`))
+      .filter(([k, v]) => v !== undefined && v !== "" && v !== false && !(Array.isArray(v) && v.length === 0) && k !== "limit" && k !== "player" && k !== "include")
+      .map(([k, v]) => (v === true ? k : `${k}=${Array.isArray(v) ? v.join(", ") : v}`))
       .join(", ");
     const who = me
       ? scope === "all"
@@ -530,7 +545,19 @@ export function createServer(): McpServer {
           : `games ${profile ? `${profile.name} (${profile.region.toUpperCase()})` : "the user"} played`
       : `games ${player?.name ?? params.player} played`;
     if (replays.length === 0) {
-      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${claimHint}`, { replays: [], profile, player, scope });
+      // Named someone the site has no games for: say so, with who they
+      // might have meant, rather than leaving the model to guess.
+      const nameHint = hints?.unknown.length
+        ? "\n\n" +
+          hints.unknown
+            .map((u) => `No player named "${u.name}" has games on StarCraft2.ai${u.similar.length ? ` (names containing it: ${u.similar.join(", ")})` : ""}.`)
+            .join("\n") +
+          (hints.frequentTeammates.length
+            ? `\n${player?.name ?? profile?.name ?? "This player"} plays most often with: ${hints.frequentTeammates.map((t) => `${t.name} (${t.games} games)`).join(", ")}. ` +
+              "In-game names can differ from nicknames: ask the user which of these they mean, then search again with that exact name."
+            : "")
+        : "";
+      return text(`No ${who}${filters ? ` matching ${filters}` : ""}. ${emptyHint}${nameHint}${claimHint}`, { replays: [], profile, player, scope, ...(hints ? { hints } : {}) });
     }
     const head = `${replays.length} of the ${who}${filters ? `, matching ${filters}` : ""}, newest first:`;
     return text(`${head}\n${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
@@ -577,7 +604,12 @@ export function createServer(): McpServer {
         "their linked SC2 profile) — use it for requests like 'my losses on Rainfall last month', 'my PvZ " +
         "games since June', 'games against <name>', 'my coached games from May'. Set player to someone else's in-game name to " +
         "search their public games instead. Every filter is optional and applied before the limit, so results cover all " +
-        "matching games, newest first. Returns replay ids for get_analysis / ask_about_replay. Free.",
+        "matching games, newest first. teammates finds games played together ('games tom, Sirry and Dan played' → teammates: " +
+        "['Sirry', 'Dan']); units finds games where the searched player built certain units ('where I went mass Liberators and " +
+        "Vikings' → units: ['Liberator', 'Viking'], min_units: 8) and shows how many of each they built. Use these filters to " +
+        "answer questions about builds and compositions — do NOT open games one by one with get_analysis to check what " +
+        "someone built. If a name matches nobody, the result lists who the player actually plays with; ask the user which " +
+        "one they mean. Each result carries its link. Returns replay ids for get_analysis / ask_about_replay. Free.",
       inputSchema: {
         player: z
           .string()
@@ -594,6 +626,23 @@ export function createServer(): McpServer {
         result: z.enum(["win", "loss"]).optional().describe("The searched player's result."),
         game_type: z.string().regex(/^\d+v\d+$/).optional().describe("e.g. '1v1', '2v2'."),
         has_report: z.boolean().optional().describe("Only games that already have an AI Coach report (free to re-read)."),
+        teammates: z
+          .array(z.string().min(1).max(40))
+          .max(5)
+          .optional()
+          .describe("In-game names that must be on the searched player's team (exact, any case)."),
+        units: z
+          .array(z.string().min(1).max(40))
+          .max(5)
+          .optional()
+          .describe("Units (or buildings) the searched player built, e.g. ['Liberator', 'Viking']; plurals and common nicknames (libs, BCs, lings) work."),
+        min_units: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("With units: at least this many of EACH (default 1). 'Mass' is roughly 8+ for air units, 15+ for cheap ground units."),
         include: z
           .enum(["played", "all"])
           .optional()
@@ -602,7 +651,7 @@ export function createServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    guarded(async (args: Record<string, string | number | boolean | undefined>) =>
+    guarded(async (args: Record<string, string | number | boolean | string[] | undefined>) =>
       runSearch({ ...args, limit: (args.limit as number | undefined) ?? 10 }, "Try fewer filters or a wider date range."),
     ),
   );
@@ -806,6 +855,152 @@ export function createServer(): McpServer {
         minerals: out.newBalance,
       });
     }),
+  );
+
+  server.registerTool(
+    "coach_my_progress",
+    {
+      title: "Check-in note: am I improving?",
+      description:
+        "The AI Coach's check-in note across a player's recent coached games in one category (ranked ladder or unranked): " +
+        "whether they're learning from their mistakes, compared with the previous note, what's working, the one recurring leak " +
+        "and what to work on next, citing the games. Defaults to the user's own linked SC2 profile; pass player + region for " +
+        "someone else's public profile. Reading the saved note is free. Writing a new one (when there are newer coached games, " +
+        `or none exists yet) COSTS ${COACH_PRICE} MINERAL and needs refresh: true plus confirm_spend: true — tell the user the price ` +
+        "and balance and get a yes first. It reads the last 5 coached games, so run analyze_replay on recent games first if " +
+        "there are fewer than 2. A new note takes 1–2 minutes: this waits up to wait_seconds, then call again to collect it.",
+      inputSchema: {
+        category: z.enum(["ranked", "unranked"]).optional().describe("ranked (ladder) or unranked games. Default: ranked, or unranked when the player has too few coached ranked games."),
+        player: z.string().min(1).max(64).optional().describe("Another player's in-game name. Omit for the signed-in user's own profile."),
+        region: z.enum(["na", "eu", "kr", "cn"]).optional().describe("Region of `player` (required with it)."),
+        refresh: z.boolean().optional().describe("Write a new note instead of returning the saved one."),
+        confirm_spend: z.boolean().optional().describe(CONFIRM_DESCRIPTION),
+        language: z.enum(COACH_LANGUAGES).optional().describe("Language of a new note (default en)."),
+        wait_seconds: z.number().int().min(0).max(300).optional().describe("Max seconds to wait for a new note before returning (default 50)."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    guarded(
+      async (
+        args: { category?: Category; player?: string; region?: string; refresh?: boolean; confirm_spend?: boolean; language?: string; wait_seconds?: number },
+        extra,
+      ) => {
+        let name = args.player;
+        let region = args.region;
+        if (name && !region) return fail("Pass `region` (na, eu, kr or cn) together with `player`.");
+        let me: Me | null = null;
+        if (!name) {
+          me = await getMe();
+          if (!me.profileName || !me.profileRegion) {
+            return fail(
+              `The user hasn't set their StarCraft II profile on StarCraft2.ai, so there's no way to know which games are theirs. ` +
+                `They can set it from the account menu on ${apiBase()} (their in-game name and region), or pass player + region.`,
+            );
+          }
+          name = me.profileName;
+          region = me.profileRegion;
+        }
+        const who = args.player ? name : "you";
+        const profileUrl = (c: Category) => `${apiBase()}/en/profiles/${region}/${encodeURIComponent(name!)}?games=${c}&tab=coach`;
+
+        // Pick the category: as asked, else ranked unless it has too few coached games.
+        let category: Category = args.category ?? "ranked";
+        let note = await getNote(region!, name!, category, extra.signal);
+        if (!args.category && note.currentReplays.length < 2 && !note.summary) {
+          const unranked = await getNote(region!, name!, "unranked", extra.signal);
+          if (unranked.currentReplays.length >= 2 || unranked.summary) {
+            category = "unranked";
+            note = unranked;
+          }
+        }
+
+        const key = noteKey(region!, name!, category);
+        let run = getNoteRun(key);
+        // A run that finished after an earlier call returned "still writing":
+        // hand its result (or its failure) back before anything else.
+        if (run && run.settled && !run.delivered) {
+          // falls through to the result handling below
+        } else if (!run || run.settled) {
+          const fresh = note.summary && !note.hasNewGames && !note.summaryNeedsRefresh;
+          if (note.summary && (fresh || !args.refresh)) {
+            const newer =
+              note.hasNewGames
+                ? `\n\n(${who === "you" ? "You have" : `${name} has`} newer coached games since this note. A new note costs ${COACH_PRICE} mineral: call again with refresh: true and confirm_spend: true once the user agrees.)`
+                : note.summaryNeedsRefresh
+                  ? "\n\n(Written by an older coach version. Call again with refresh: true to rewrite it on the current one for free.)"
+                  : "";
+            return text(`${formatNote(note, apiBase())}${newer}\n\nOn the site: ${profileUrl(category)}`, {
+              status: "saved",
+              category,
+              spent: 0,
+              hasNewGames: note.hasNewGames,
+            });
+          }
+          if (note.currentReplays.length < 2) {
+            return fail(
+              `A check-in note needs at least 2 coached ${category} games and ${who === "you" ? "you have" : `${name} has`} ${note.currentReplays.length}. ` +
+                `Run the AI Coach on more ${category} games first (list_my_replays, then analyze_replay).`,
+            );
+          }
+          const free = !!note.summary && !note.hasNewGames && note.summaryNeedsRefresh;
+          if (!free) {
+            me = me ?? (await getMe());
+            if (me.tokenCanSpend === false) return fail(spendOffText());
+            if (me.minerals < COACH_PRICE) {
+              return fail(`A new check-in note costs ${COACH_PRICE} mineral and the balance is ${me.minerals}. The user can buy minerals at ${billingUrl()}.`);
+            }
+            const gate = await confirmSpend(
+              server,
+              confirm_spend_or(args),
+              `Write a new AI Coach check-in note on ${who === "you" ? "your" : `${name}'s`} last ${Math.min(5, note.currentReplays.length)} coached ${category} games for ${COACH_PRICE} mineral? Your balance is ${me.minerals}.`,
+            );
+            if (gate === "declined") return text("Not started: the user declined the spend.", { status: "declined" });
+            if (gate === "needs_flag") {
+              return text(
+                `Not started. A new check-in note on the last ${Math.min(5, note.currentReplays.length)} coached ${category} games costs ${COACH_PRICE} mineral; ` +
+                  `the balance is ${me.minerals}. Ask the user, then call again with refresh: true and confirm_spend: true.`,
+                { status: "confirmation_required", price: COACH_PRICE, minerals: me.minerals, category },
+              );
+            }
+          }
+          run = startNoteRun({ region: region!, name: name!, category, language: args.language ?? "en", free });
+        }
+
+        const report = progressReporter(extra);
+        const settled = await waitForNote(run, (args.wait_seconds ?? 50) * 1000, (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
+        if (!settled) {
+          return text(
+            `Still writing the check-in note (${Math.round((Date.now() - run.startedAt) / 1000)}s so far; it usually takes 1–2 minutes). ` +
+              `Call coach_my_progress again with the same player and category to collect it — don't pass refresh again.`,
+            { status: "running", category },
+          );
+        }
+        run.delivered = true;
+        if (run.error) {
+          const e = run.error;
+          if (e instanceof ApiError && e.code === "WOULD_CHARGE") {
+            return text(
+              `Not written: newer coached games turned up, so a new note now costs ${COACH_PRICE} mineral. Ask the user, then call again with refresh: true and confirm_spend: true.`,
+              { status: "confirmation_required", price: COACH_PRICE, category },
+            );
+          }
+          if (e instanceof ApiError && e.status === 409) {
+            const saved = await getNote(region!, name!, category, extra.signal);
+            return text(`Already up to date — no newer coached games since the saved note. Nothing was charged.\n\n${formatNote(saved, apiBase())}`, {
+              status: "saved",
+              category,
+              spent: 0,
+            });
+          }
+          throw e;
+        }
+        return text(`${formatNote(run.note!, apiBase())}\n\nOn the site: ${profileUrl(category)}`, {
+          status: "written",
+          category,
+          summaryId: run.note!.summaryId,
+        });
+      },
+    ),
   );
 
   return server;
