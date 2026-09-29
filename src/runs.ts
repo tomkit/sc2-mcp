@@ -1,4 +1,4 @@
-import { ApiError, errorFrom, request, type AiAnalysis } from "./api.js";
+import { ApiError, errorFrom, hosted, request, type AiAnalysis } from "./api.js";
 
 /**
  * AI Coach runs started by this process. A run takes 3–7 minutes, longer
@@ -25,8 +25,13 @@ const runs = new Map<string, CoachRun>();
 /** Median chain-of-thought volume of a full run (the site's progress bar uses the same figure). */
 export const TYPICAL_REASONING_CHARS = 85_000;
 
+/** Hosted mode shares one process between users: key runs by caller too. */
+function key(replayId: string): string {
+  return `${hosted()?.principal ?? ""}:${replayId}`;
+}
+
 export function getRun(replayId: string): CoachRun | undefined {
-  return runs.get(replayId);
+  return runs.get(key(replayId));
 }
 
 export function progressFraction(run: CoachRun): number {
@@ -36,7 +41,7 @@ export function progressFraction(run: CoachRun): number {
 }
 
 export function startRun(replayId: string, body: Record<string, unknown>): CoachRun {
-  const existing = runs.get(replayId);
+  const existing = runs.get(key(replayId));
   if (existing && !existing.settled) return existing;
 
   const run: CoachRun = {
@@ -75,7 +80,9 @@ export function startRun(replayId: string, body: Record<string, unknown>): Coach
       run.settled = true;
     }
   })();
-  runs.set(replayId, run);
+  runs.set(key(replayId), run);
+  // Hosted: the site keeps the function alive until the run is charged and saved.
+  hosted()?.keepAlive(run.done);
   return run;
 }
 

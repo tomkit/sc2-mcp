@@ -10,6 +10,7 @@ import {
   NotSignedInError,
   errorFrom,
   getJson,
+  hosted,
   getReplay,
   postJson,
   request,
@@ -43,6 +44,9 @@ const CONFIRM_DESCRIPTION =
  */
 async function confirmSpend(server: McpServer, flag: boolean | undefined, question: string): Promise<"ok" | "needs_flag" | "declined"> {
   if (flag !== true) return "needs_flag";
+  // Hosted calls are stateless (a reply to a question would reach another
+  // function); Claude and ChatGPT ask the user before a tool that writes.
+  if (hosted()) return "ok";
   if (!server.server.getClientCapabilities()?.elicitation) return "ok";
   try {
     const res = await server.server.elicitInput({
@@ -137,7 +141,7 @@ function expandPath(p: string): string {
   return resolve(p);
 }
 
-async function loadReplayBytes(args: { path?: string; url?: string }, signal: AbortSignal): Promise<{ bytes: Buffer; filename: string }> {
+async function loadReplayBytes(args: { path?: string; url?: string; name?: string }, signal: AbortSignal): Promise<{ bytes: Buffer; filename: string }> {
   if (args.path) {
     const full = expandPath(args.path);
     const info = await stat(full).catch(() => null);
@@ -167,7 +171,9 @@ async function loadReplayBytes(args: { path?: string; url?: string }, signal: Ab
     chunks.push(value);
   }
   const bytes = Buffer.concat(chunks);
-  const name = decodeURIComponent(url.pathname.split("/").pop() || "replay.SC2Replay");
+  // A chat attachment's download URL is an opaque id; its name comes separately.
+  let name = args.name || decodeURIComponent(url.pathname.split("/").pop() || "replay.SC2Replay");
+  if (!/\.(sc2replay|rep)$/i.test(name)) name = bytes.subarray(0, 3).toString("latin1") === "MPQ" ? "replay.SC2Replay" : name;
   return { bytes, filename: name };
 }
 
@@ -284,13 +290,28 @@ async function readChatStream(res: Response): Promise<string> {
 
 // ---- Server ----
 
-export function createServer(): McpServer {
+/**
+ * `hosted`: the tools as StarCraft2.ai serves them to Claude and ChatGPT
+ * (https://www.starcraft2.ai/api/mcp). The app signs the user in with
+ * OAuth, so there's no login/logout tool; there is no local disk, so
+ * uploads come from a link or (in ChatGPT) a file the user attached; and
+ * tool calls are cut off after about a minute in ChatGPT, so waits are
+ * shorter.
+ */
+export function createServer(opts: { hosted?: boolean } = {}): McpServer {
+  const isHosted = opts.hosted === true;
+  /** Default seconds a tool waits on a long run before returning "still going". */
+  const WAIT_DEFAULT = isHosted ? 40 : 50;
+  /** Hosted calls must return inside the apps' tool-call limits (ChatGPT ~60 s). */
+  const waitMs = (seconds: number | undefined) => Math.min(seconds ?? WAIT_DEFAULT, isHosted ? 45 : 600) * 1000;
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "StarCraft II AI Coach (StarCraft2.ai)" },
     {
       instructions:
         "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. " +
-        "Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. " +
+        (isHosted
+          ? "The user is signed in through this app's StarCraft2.ai connector; if a tool says the sign-in expired, ask them to reconnect it in the app's connector settings. "
+          : "Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. ") +
         "Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions " +
         "about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless " +
         "`confirm_spend` is true — ask the user first and only set it after they agree. When the user mentions one of their " +
@@ -306,7 +327,7 @@ export function createServer(): McpServer {
     },
   );
 
-  server.registerTool(
+  if (!isHosted) server.registerTool(
     "login",
     {
       title: "Sign in to StarCraft2.ai",
@@ -366,7 +387,7 @@ export function createServer(): McpServer {
     }),
   );
 
-  server.registerTool(
+  if (!isHosted) server.registerTool(
     "logout",
     {
       title: "Sign out",
@@ -450,21 +471,50 @@ export function createServer(): McpServer {
     "upload_replay",
     {
       title: "Upload a replay",
-      description:
-        "Upload a StarCraft II replay (.SC2Replay) — or a Brood War .rep — to StarCraft2.ai from a local file path or a download URL. " +
-        "Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the " +
-        "replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\…\\Replays\\Multiplayer; " +
-        "on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/…/Replays/Multiplayer.",
-      inputSchema: {
-        path: z.string().min(1).optional().describe("Local path to the replay file (~ is expanded)."),
-        url: z.string().url().optional().describe("http(s) URL the replay file can be downloaded from."),
-      },
+      description: isHosted
+        ? "Upload a StarCraft II replay (.SC2Replay) — or a Brood War .rep — to StarCraft2.ai: a file the user attached to the " +
+          "chat (`file`), or a download link (`url`). Returns the replay id and page, and whether an AI Coach report already " +
+          "exists. Free. If the user can't attach files here, suggest the free auto-uploader (starcraft2.ai/en/uploader), which " +
+          "uploads every game they play."
+        : "Upload a StarCraft II replay (.SC2Replay) — or a Brood War .rep — to StarCraft2.ai from a local file path or a download URL. " +
+          "Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the " +
+          "replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\…\\Replays\\Multiplayer; " +
+          "on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/…/Replays/Multiplayer.",
+      inputSchema: isHosted
+        ? {
+            // ChatGPT fills a parameter listed in openai/fileParams with the
+            // attached file: a short-lived download_url plus ids.
+            file: z
+              .object({
+                download_url: z.string().url(),
+                file_id: z.string(),
+                mime_type: z.string().optional(),
+                file_name: z.string().optional(),
+              })
+              .strict()
+              .optional()
+              .describe("The replay file the user attached to the chat."),
+            url: z.string().url().optional().describe("http(s) URL the replay file can be downloaded from."),
+          }
+        : {
+            path: z.string().min(1).optional().describe("Local path to the replay file (~ is expanded)."),
+            url: z.string().url().optional().describe("http(s) URL the replay file can be downloaded from."),
+          },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      ...(isHosted ? { _meta: { "openai/fileParams": ["file"] } } : {}),
     },
-    guarded(async (args: { path?: string; url?: string }, extra) => {
-      if (!!args.path === !!args.url) return fail("Give exactly one of `path` or `url`.");
-      const signedIn = !!(await currentToken());
-      const { bytes, filename } = await loadReplayBytes(args, extra.signal);
+    guarded(async (args: { path?: string; url?: string; file?: { download_url: string; file_name?: string } }, extra) => {
+      const source = args.file
+        ? { url: args.file.download_url, name: args.file.file_name }
+        : args.path && !isHosted
+          ? { path: args.path }
+          : args.url
+            ? { url: args.url }
+            : null;
+      const given = [args.file, args.path, args.url].filter(Boolean).length;
+      if (!source || given !== 1) return fail(isHosted ? "Give exactly one of `file` or `url`." : "Give exactly one of `path` or `url`.");
+      const signedIn = isHosted || !!(await currentToken());
+      const { bytes, filename } = await loadReplayBytes(source, extra.signal);
       const isBw = filename.toLowerCase().endsWith(".rep");
       if (!isBw && !(bytes.length >= 64 && bytes.subarray(0, 3).toString("latin1") === "MPQ")) {
         return fail(`${filename} isn't a StarCraft II replay (expected an .SC2Replay file).`);
@@ -670,7 +720,7 @@ export function createServer(): McpServer {
         "going, waits for it (up to wait_seconds) and returns the report when it lands. Free — never spends minerals.",
       inputSchema: {
         replay: replayArg,
-        wait_seconds: z.number().int().min(0).max(600).optional().describe("Max seconds to wait for an in-progress run (default 50)."),
+        wait_seconds: z.number().int().min(0).max(600).optional().describe(`Max seconds to wait for an in-progress run (default ${WAIT_DEFAULT}).`),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -679,11 +729,18 @@ export function createServer(): McpServer {
       const run = getRun(summary.id);
       if (run && !run.analysis && !run.error) {
         const report = progressReporter(extra);
-        const settled = await waitForRun(run, (wait_seconds ?? 50) * 1000, (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
+        const settled = await waitForRun(run, waitMs(wait_seconds), (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
         if (!settled) return text(runStatusText(run, summary), { status: "running", replayId: summary.id });
         return runResult(run, summary);
       }
       if (run?.analysis || run?.error) return runResult(run, summary);
+      if (!summary.analysis && summary.coachInProgress) {
+        // Started earlier (another call, or on the website): the site is still on it.
+        return text(
+          `The AI Coach is still analyzing ${summary.map ?? "this replay"}. Runs take 3–7 minutes; call get_analysis again in a minute. No further minerals are needed.`,
+          { status: "running", replayId: summary.id },
+        );
+      }
       if (!summary.analysis) {
         return text(`${formatReplayHeader(summary)}\n\nNo AI Coach report yet. analyze_replay runs one for ${COACH_PRICE} mineral (ask the user first).`, {
           replayId: summary.id,
@@ -716,7 +773,7 @@ export function createServer(): McpServer {
           .boolean()
           .optional()
           .describe("Re-run an existing report that was made with an older coach version. Free; only works when the report is outdated."),
-        wait_seconds: z.number().int().min(0).max(600).optional().describe("Max seconds to wait before returning (default 50)."),
+        wait_seconds: z.number().int().min(0).max(600).optional().describe(`Max seconds to wait before returning (default ${WAIT_DEFAULT}).`),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -734,6 +791,12 @@ export function createServer(): McpServer {
               `This replay already has an AI Coach report — no minerals spent.${language && summary.analysisLanguage && language !== summary.analysisLanguage ? ` (It is in ${summary.analysisLanguage}; a report is made once per replay.)` : ""}\n\n${formatReplayHeader(summary)}\n\n${formatAnalysis(summary.analysis)}` +
                 (outdated ? `\n\n(Older coach version; pass upgrade: true to re-run it on the current version for free.)` : ""),
               { replayId: summary.id, spent: 0, analysis: summary.analysis as unknown as Record<string, unknown> },
+            );
+          }
+          if (!summary.analysis && summary.coachInProgress) {
+            return text(
+              `The AI Coach is already analyzing ${summary.map ?? "this replay"} (started earlier). Call get_analysis in a minute to collect the report; nothing more is charged.`,
+              { status: "running", replayId: summary.id },
             );
           }
           if (upgrade && summary.analysis && outdated) {
@@ -761,7 +824,7 @@ export function createServer(): McpServer {
           }
         }
         const report = progressReporter(extra);
-        const settled = await waitForRun(run, (wait_seconds ?? 50) * 1000, (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
+        const settled = await waitForRun(run, waitMs(wait_seconds), (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
         if (!settled) return text(runStatusText(run, summary), { status: "running", replayId: summary.id });
         return runResult(run, summary);
       },
@@ -876,7 +939,7 @@ export function createServer(): McpServer {
         refresh: z.boolean().optional().describe("Write a new note instead of returning the saved one."),
         confirm_spend: z.boolean().optional().describe(CONFIRM_DESCRIPTION),
         language: z.enum(COACH_LANGUAGES).optional().describe("Language of a new note (default en)."),
-        wait_seconds: z.number().int().min(0).max(300).optional().describe("Max seconds to wait for a new note before returning (default 50)."),
+        wait_seconds: z.number().int().min(0).max(300).optional().describe(`Max seconds to wait for a new note before returning (default ${WAIT_DEFAULT}).`),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -967,7 +1030,7 @@ export function createServer(): McpServer {
         }
 
         const report = progressReporter(extra);
-        const settled = await waitForNote(run, (args.wait_seconds ?? 50) * 1000, (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
+        const settled = await waitForNote(run, waitMs(args.wait_seconds), (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
         if (!settled) {
           return text(
             `Still writing the check-in note (${Math.round((Date.now() - run.startedAt) / 1000)}s so far; it usually takes 1–2 minutes). ` +

@@ -1,6 +1,6 @@
-# sc2-mcp — StarCraft II AI Coach for Claude, Codex and other MCP clients
+# sc2-mcp — StarCraft II AI Coach for ChatGPT, Claude, Codex and other MCP clients
 
-An [MCP](https://modelcontextprotocol.io) server for [StarCraft2.ai](https://www.starcraft2.ai). From Claude Code, Codex, Claude Desktop, Cursor or any other MCP client you can:
+An [MCP](https://modelcontextprotocol.io) server for [StarCraft2.ai](https://www.starcraft2.ai). From ChatGPT, Claude, Claude Code, Codex, Cursor or any other MCP client you can:
 
 - **Ask StarCraft II questions.** Answers come from the same knowledge base the AI Coach cites: Liquipedia unit data, current patch notes, strategy articles and pro-game insights.
 - **Upload a replay** from a file on your computer or from a download link.
@@ -19,6 +19,19 @@ Uploading works without an account. Everything else needs a StarCraft2.ai accoun
 **A new connection can't spend minerals at all until you allow it** on [starcraft2.ai/auth/mcp](https://www.starcraft2.ai/auth/mcp) under Connected apps, so a sign-in someone tricked you into approving can read but not spend. Once allowed, a tool still never spends unless it's called with `confirm_spend: true`, and the tool descriptions tell the assistant to ask you first. If your client supports MCP elicitation, the server also asks you directly before spending, so nothing the assistant reads in a replay or a report can approve a purchase for you. Buy minerals at [starcraft2.ai/en/billing](https://www.starcraft2.ai/en/billing).
 
 ## Install
+
+### ChatGPT and Claude (hosted connector, nothing to install)
+
+Add a custom connector with this URL:
+
+```
+https://www.starcraft2.ai/api/mcp
+```
+
+- **Claude** (claude.ai, desktop and mobile apps): **Customize → Connectors → Add custom connector**, then **Connect** and sign in. Team and Enterprise owners add it under Organization settings → Connectors.
+- **ChatGPT** (paid plans, chatgpt.com): turn on developer mode (**Settings → Security and login → Developer mode**), then **Plugins → +**, paste the URL and sign in. ChatGPT can pass an attached replay file straight to `upload_replay`.
+
+The hosted connector runs the same tools as this package on starcraft2.ai (it imports `sc2-mcp/lib`). It signs in with OAuth and has no `login`/`logout` tools; spending still needs to be allowed under Connected apps. Step-by-step with screenshots: [starcraft2.ai/en/mcp](https://www.starcraft2.ai/en/mcp).
 
 ### Claude Code (plugin)
 
@@ -62,9 +75,9 @@ Nothing to download: the config runs the server straight from this repo with `np
 }
 ```
 
-Then check **+ → Connectors → Manage connectors** lists `sc2`, and ask Claude to sign you in to StarCraft2.ai. Step-by-step instructions with screenshots: [starcraft2.ai/en/mcp](https://www.starcraft2.ai/en/mcp#claude-desktop). A local clone works too: `"command": "node", "args": ["/absolute/path/to/sc2-mcp/dist/index.js"]`.
+Then check **+ → Connectors → Manage connectors** lists `sc2`, and ask Claude to sign you in to StarCraft2.ai. Step-by-step instructions with screenshots: [starcraft2.ai/en/mcp](https://www.starcraft2.ai/en/mcp#other). A local clone works too: `"command": "node", "args": ["/absolute/path/to/sc2-mcp/dist/index.js"]`.
 
-The claude.ai and chatgpt.com websites can't add it as a connector yet: they need a server hosted at a web address, and this one runs on your computer. With a ChatGPT plan, use it through Codex (above).
+Claude Desktop can also use the hosted connector above, which needs no Node.js and no config file.
 
 It needs Node.js 18.17 or newer on your `PATH`, including for the Claude Code and Codex plugins (neither installer brings Node with it). `dist/index.js` is a self-contained bundle, so there is nothing to `npm install`.
 

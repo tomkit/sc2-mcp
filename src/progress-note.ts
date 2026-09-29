@@ -1,4 +1,4 @@
-import { ApiError, errorFrom, request } from "./api.js";
+import { ApiError, errorFrom, hosted, request } from "./api.js";
 
 /** A game the check-in note read (or would read), as /api/profile-coach lists it. */
 export interface NoteGame {
@@ -40,7 +40,7 @@ export interface NoteRun {
 const runs = new Map<string, NoteRun>();
 
 export function noteKey(region: string, name: string, category: Category): string {
-  return `${region}/${name.toLowerCase()}/${category}`;
+  return `${hosted()?.principal ?? ""}:${region}/${name.toLowerCase()}/${category}`;
 }
 
 export function getNoteRun(key: string): NoteRun | undefined {
@@ -99,6 +99,7 @@ export function startNoteRun(args: { region: string; name: string; category: Cat
     }
   })();
   runs.set(key, run);
+  hosted()?.keepAlive(run.done);
   return run;
 }
 

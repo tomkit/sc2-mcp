@@ -19,9 +19,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    for (let key2 of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key2) && key2 !== except)
+        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
   }
   return to;
 };
@@ -170,15 +170,15 @@ var require_code = __commonJS({
       return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
     exports.safeStringify = safeStringify;
-    function getProperty(key) {
-      return typeof key == "string" && exports.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
+    function getProperty(key2) {
+      return typeof key2 == "string" && exports.IDENTIFIER.test(key2) ? new _Code(`.${key2}`) : _`[${key2}]`;
     }
     exports.getProperty = getProperty;
-    function getEsmExportName(key) {
-      if (typeof key == "string" && exports.IDENTIFIER.test(key)) {
-        return new _Code(`${key}`);
+    function getEsmExportName(key2) {
+      if (typeof key2 == "string" && exports.IDENTIFIER.test(key2)) {
+        return new _Code(`${key2}`);
       }
-      throw new Error(`CodeGen: invalid export name: ${key}, use explicit $id name mapping`);
+      throw new Error(`CodeGen: invalid export name: ${key2}, use explicit $id name mapping`);
     }
     exports.getEsmExportName = getEsmExportName;
     function regexpCode(rx) {
@@ -805,11 +805,11 @@ var require_codegen = __commonJS({
       // returns code for object literal for the passed argument list of key-value pairs
       object(...keyValues) {
         const code = ["{"];
-        for (const [key, value] of keyValues) {
+        for (const [key2, value] of keyValues) {
           if (code.length > 1)
             code.push(",");
-          code.push(key);
-          if (key !== value || this.opts.es5) {
+          code.push(key2);
+          if (key2 !== value || this.opts.es5) {
             code.push(":");
             (0, code_1.addCodeArg)(code, value);
           }
@@ -1084,17 +1084,17 @@ var require_util = __commonJS({
       if (typeof schema === "boolean")
         return;
       const rules = self.RULES.keywords;
-      for (const key in schema) {
-        if (!rules[key])
-          checkStrictMode(it, `unknown keyword: "${key}"`);
+      for (const key2 in schema) {
+        if (!rules[key2])
+          checkStrictMode(it, `unknown keyword: "${key2}"`);
       }
     }
     exports.checkUnknownRules = checkUnknownRules;
     function schemaHasRules(schema, rules) {
       if (typeof schema == "boolean")
         return !schema;
-      for (const key in schema)
-        if (rules[key])
+      for (const key2 in schema)
+        if (rules[key2])
           return true;
       return false;
     }
@@ -1102,8 +1102,8 @@ var require_util = __commonJS({
     function schemaHasRulesButRef(schema, RULES) {
       if (typeof schema == "boolean")
         return !schema;
-      for (const key in schema)
-        if (key !== "$ref" && RULES.all[key])
+      for (const key2 in schema)
+        if (key2 !== "$ref" && RULES.all[key2])
           return true;
       return false;
     }
@@ -1681,8 +1681,8 @@ var require_defaults = __commonJS({
     function assignDefaults(it, ty) {
       const { properties, items } = it.schema;
       if (ty === "object" && properties) {
-        for (const key in properties) {
-          assignDefault(it, key, properties[key].default);
+        for (const key2 in properties) {
+          assignDefault(it, key2, properties[key2].default);
         }
       } else if (ty === "array" && Array.isArray(items)) {
         items.forEach((sch, i) => assignDefault(it, i, sch.default));
@@ -2066,8 +2066,8 @@ var require_fast_deep_equal = __commonJS({
         for (i = length; i-- !== 0; )
           if (!Object.prototype.hasOwnProperty.call(b, keys[i])) return false;
         for (i = length; i-- !== 0; ) {
-          var key = keys[i];
-          if (!equal(a[key], b[key])) return false;
+          var key2 = keys[i];
+          if (!equal(a[key2], b[key2])) return false;
         }
         return true;
       }
@@ -2139,20 +2139,20 @@ var require_json_schema_traverse = __commonJS({
     function _traverse(opts, pre, post, schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex) {
       if (schema && typeof schema == "object" && !Array.isArray(schema)) {
         pre(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
-        for (var key in schema) {
-          var sch = schema[key];
+        for (var key2 in schema) {
+          var sch = schema[key2];
           if (Array.isArray(sch)) {
-            if (key in traverse.arrayKeywords) {
+            if (key2 in traverse.arrayKeywords) {
               for (var i = 0; i < sch.length; i++)
-                _traverse(opts, pre, post, sch[i], jsonPtr + "/" + key + "/" + i, rootSchema, jsonPtr, key, schema, i);
+                _traverse(opts, pre, post, sch[i], jsonPtr + "/" + key2 + "/" + i, rootSchema, jsonPtr, key2, schema, i);
             }
-          } else if (key in traverse.propsKeywords) {
+          } else if (key2 in traverse.propsKeywords) {
             if (sch && typeof sch == "object") {
               for (var prop in sch)
-                _traverse(opts, pre, post, sch[prop], jsonPtr + "/" + key + "/" + escapeJsonPtr(prop), rootSchema, jsonPtr, key, schema, prop);
+                _traverse(opts, pre, post, sch[prop], jsonPtr + "/" + key2 + "/" + escapeJsonPtr(prop), rootSchema, jsonPtr, key2, schema, prop);
             }
-          } else if (key in traverse.keywords || opts.allKeys && !(key in traverse.skipKeywords)) {
-            _traverse(opts, pre, post, sch, jsonPtr + "/" + key, rootSchema, jsonPtr, key, schema);
+          } else if (key2 in traverse.keywords || opts.allKeys && !(key2 in traverse.skipKeywords)) {
+            _traverse(opts, pre, post, sch, jsonPtr + "/" + key2, rootSchema, jsonPtr, key2, schema);
           }
         }
         post(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
@@ -2209,10 +2209,10 @@ var require_resolve = __commonJS({
       "$dynamicAnchor"
     ]);
     function hasRef(schema) {
-      for (const key in schema) {
-        if (REF_KEYWORDS.has(key))
+      for (const key2 in schema) {
+        if (REF_KEYWORDS.has(key2))
           return true;
-        const sch = schema[key];
+        const sch = schema[key2];
         if (Array.isArray(sch) && sch.some(hasRef))
           return true;
         if (typeof sch == "object" && hasRef(sch))
@@ -2222,14 +2222,14 @@ var require_resolve = __commonJS({
     }
     function countKeys(schema) {
       let count = 0;
-      for (const key in schema) {
-        if (key === "$ref")
+      for (const key2 in schema) {
+        if (key2 === "$ref")
           return Infinity;
         count++;
-        if (SIMPLE_INLINED.has(key))
+        if (SIMPLE_INLINED.has(key2))
           continue;
-        if (typeof schema[key] == "object") {
-          (0, util_1.eachItem)(schema[key], (sch) => count += countKeys(sch));
+        if (typeof schema[key2] == "object") {
+          (0, util_1.eachItem)(schema[key2], (sch) => count += countKeys(sch));
         }
         if (count === Infinity)
           return Infinity;
@@ -2418,8 +2418,8 @@ var require_validate = __commonJS({
     function schemaCxtHasRules({ schema, self }) {
       if (typeof schema == "boolean")
         return !schema;
-      for (const key in schema)
-        if (self.RULES.all[key])
+      for (const key2 in schema)
+        if (self.RULES.all[key2])
           return true;
       return false;
     }
@@ -4458,7 +4458,7 @@ var require_core = __commonJS({
         }
       }
       // Adds schema to the instance
-      addSchema(schema, key, _meta, _validateSchema = this.opts.validateSchema) {
+      addSchema(schema, key2, _meta, _validateSchema = this.opts.validateSchema) {
         if (Array.isArray(schema)) {
           for (const sch of schema)
             this.addSchema(sch, void 0, _meta, _validateSchema);
@@ -4472,15 +4472,15 @@ var require_core = __commonJS({
             throw new Error(`schema ${schemaId} must be string`);
           }
         }
-        key = (0, resolve_1.normalizeId)(key || id);
-        this._checkUnique(key);
-        this.schemas[key] = this._addSchema(schema, _meta, key, _validateSchema, true);
+        key2 = (0, resolve_1.normalizeId)(key2 || id);
+        this._checkUnique(key2);
+        this.schemas[key2] = this._addSchema(schema, _meta, key2, _validateSchema, true);
         return this;
       }
       // Add schema that will be used to validate other schemas
       // options in META_IGNORE_OPTIONS are alway set to false
-      addMetaSchema(schema, key, _validateSchema = this.opts.validateSchema) {
-        this.addSchema(schema, key, true, _validateSchema);
+      addMetaSchema(schema, key2, _validateSchema = this.opts.validateSchema) {
+        this.addSchema(schema, key2, true, _validateSchema);
         return this;
       }
       //  Validate schema against its meta-schema
@@ -4636,14 +4636,14 @@ var require_core = __commonJS({
           let keywords = metaSchema;
           for (const seg of segments)
             keywords = keywords[seg];
-          for (const key in rules) {
-            const rule = rules[key];
+          for (const key2 in rules) {
+            const rule = rules[key2];
             if (typeof rule != "object")
               continue;
             const { $data } = rule.definition;
-            const schema = keywords[key];
+            const schema = keywords[key2];
             if ($data && schema)
-              keywords[key] = schemaOrData(schema);
+              keywords[key2] = schemaOrData(schema);
           }
         }
         return metaSchema;
@@ -4716,10 +4716,10 @@ var require_core = __commonJS({
     Ajv2.MissingRefError = ref_error_1.default;
     exports.default = Ajv2;
     function checkOptions(checkOpts, options, msg, log = "error") {
-      for (const key in checkOpts) {
-        const opt = key;
+      for (const key2 in checkOpts) {
+        const opt = key2;
         if (opt in options)
-          this.logger[log](`${msg}: option ${key}. ${checkOpts[opt]}`);
+          this.logger[log](`${msg}: option ${key2}. ${checkOpts[opt]}`);
       }
     }
     function getSchEnv(keyRef) {
@@ -4733,8 +4733,8 @@ var require_core = __commonJS({
       if (Array.isArray(optsSchemas))
         this.addSchema(optsSchemas);
       else
-        for (const key in optsSchemas)
-          this.addSchema(optsSchemas[key], key);
+        for (const key2 in optsSchemas)
+          this.addSchema(optsSchemas[key2], key2);
     }
     function addInitialFormats() {
       for (const name in this.opts.formats) {
@@ -5782,11 +5782,11 @@ var require_dependencies = __commonJS({
     function splitDependencies({ schema }) {
       const propertyDeps = {};
       const schemaDeps = {};
-      for (const key in schema) {
-        if (key === "__proto__")
+      for (const key2 in schema) {
+        if (key2 === "__proto__")
           continue;
-        const deps = Array.isArray(schema[key]) ? propertyDeps : schemaDeps;
-        deps[key] = schema[key];
+        const deps = Array.isArray(schema[key2]) ? propertyDeps : schemaDeps;
+        deps[key2] = schema[key2];
       }
       return [propertyDeps, schemaDeps];
     }
@@ -5863,13 +5863,13 @@ var require_propertyNames = __commonJS({
         if ((0, util_1.alwaysValidSchema)(it, schema))
           return;
         const valid = gen.name("valid");
-        gen.forIn("key", data, (key) => {
-          cxt.setParams({ propertyName: key });
+        gen.forIn("key", data, (key2) => {
+          cxt.setParams({ propertyName: key2 });
           cxt.subschema({
             keyword: "propertyNames",
-            data: key,
+            data: key2,
             dataTypes: ["string"],
-            propertyName: key,
+            propertyName: key2,
             compositeRule: true
           }, valid);
           gen.if((0, codegen_1.not)(valid), () => {
@@ -5918,38 +5918,38 @@ var require_additionalProperties = __commonJS({
         checkAdditionalProperties();
         cxt.ok((0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
         function checkAdditionalProperties() {
-          gen.forIn("key", data, (key) => {
+          gen.forIn("key", data, (key2) => {
             if (!props.length && !patProps.length)
-              additionalPropertyCode(key);
+              additionalPropertyCode(key2);
             else
-              gen.if(isAdditional(key), () => additionalPropertyCode(key));
+              gen.if(isAdditional(key2), () => additionalPropertyCode(key2));
           });
         }
-        function isAdditional(key) {
+        function isAdditional(key2) {
           let definedProp;
           if (props.length > 8) {
             const propsSchema = (0, util_1.schemaRefOrVal)(it, parentSchema.properties, "properties");
-            definedProp = (0, code_1.isOwnProperty)(gen, propsSchema, key);
+            definedProp = (0, code_1.isOwnProperty)(gen, propsSchema, key2);
           } else if (props.length) {
-            definedProp = (0, codegen_1.or)(...props.map((p) => (0, codegen_1._)`${key} === ${p}`));
+            definedProp = (0, codegen_1.or)(...props.map((p) => (0, codegen_1._)`${key2} === ${p}`));
           } else {
             definedProp = codegen_1.nil;
           }
           if (patProps.length) {
-            definedProp = (0, codegen_1.or)(definedProp, ...patProps.map((p) => (0, codegen_1._)`${(0, code_1.usePattern)(cxt, p)}.test(${key})`));
+            definedProp = (0, codegen_1.or)(definedProp, ...patProps.map((p) => (0, codegen_1._)`${(0, code_1.usePattern)(cxt, p)}.test(${key2})`));
           }
           return (0, codegen_1.not)(definedProp);
         }
-        function deleteAdditional(key) {
-          gen.code((0, codegen_1._)`delete ${data}[${key}]`);
+        function deleteAdditional(key2) {
+          gen.code((0, codegen_1._)`delete ${data}[${key2}]`);
         }
-        function additionalPropertyCode(key) {
+        function additionalPropertyCode(key2) {
           if (opts.removeAdditional === "all" || opts.removeAdditional && schema === false) {
-            deleteAdditional(key);
+            deleteAdditional(key2);
             return;
           }
           if (schema === false) {
-            cxt.setParams({ additionalProperty: key });
+            cxt.setParams({ additionalProperty: key2 });
             cxt.error();
             if (!allErrors)
               gen.break();
@@ -5958,22 +5958,22 @@ var require_additionalProperties = __commonJS({
           if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
             const valid = gen.name("valid");
             if (opts.removeAdditional === "failing") {
-              applyAdditionalSchema(key, valid, false);
+              applyAdditionalSchema(key2, valid, false);
               gen.if((0, codegen_1.not)(valid), () => {
                 cxt.reset();
-                deleteAdditional(key);
+                deleteAdditional(key2);
               });
             } else {
-              applyAdditionalSchema(key, valid);
+              applyAdditionalSchema(key2, valid);
               if (!allErrors)
                 gen.if((0, codegen_1.not)(valid), () => gen.break());
             }
           }
         }
-        function applyAdditionalSchema(key, valid, errors) {
+        function applyAdditionalSchema(key2, valid, errors) {
           const subschema = {
             keyword: "additionalProperties",
-            dataProp: key,
+            dataProp: key2,
             dataPropType: util_1.Type.Str
           };
           if (errors === false) {
@@ -6098,19 +6098,19 @@ var require_patternProperties = __commonJS({
           }
         }
         function validateProperties(pat) {
-          gen.forIn("key", data, (key) => {
-            gen.if((0, codegen_1._)`${(0, code_1.usePattern)(cxt, pat)}.test(${key})`, () => {
+          gen.forIn("key", data, (key2) => {
+            gen.if((0, codegen_1._)`${(0, code_1.usePattern)(cxt, pat)}.test(${key2})`, () => {
               const alwaysValid = alwaysValidPatterns.includes(pat);
               if (!alwaysValid) {
                 cxt.subschema({
                   keyword: "patternProperties",
                   schemaProp: pat,
-                  dataProp: key,
+                  dataProp: key2,
                   dataPropType: util_2.Type.Str
                 }, valid);
               }
               if (it.opts.unevaluated && props !== true) {
-                gen.assign((0, codegen_1._)`${props}[${key}]`, true);
+                gen.assign((0, codegen_1._)`${props}[${key2}]`, true);
               } else if (!alwaysValid && !it.allErrors) {
                 gen.if((0, codegen_1.not)(valid), () => gen.break());
               }
@@ -7370,19 +7370,19 @@ function floatSafeRemainder(val, step) {
   const stepInt = Number.parseInt(step.toFixed(decCount).replace(".", ""));
   return valInt % stepInt / 10 ** decCount;
 }
-function defineLazy(object3, key, getter) {
+function defineLazy(object3, key2, getter) {
   const set = false;
-  Object.defineProperty(object3, key, {
+  Object.defineProperty(object3, key2, {
     get() {
       if (!set) {
         const value = getter();
-        object3[key] = value;
+        object3[key2] = value;
         return value;
       }
       throw new Error("cached value already set");
     },
     set(v) {
-      Object.defineProperty(object3, key, {
+      Object.defineProperty(object3, key2, {
         value: v
         // configurable: true,
       });
@@ -7401,11 +7401,11 @@ function assignProp(target, prop, value) {
 function getElementAtPath(obj, path) {
   if (!path)
     return obj;
-  return path.reduce((acc, key) => acc?.[key], obj);
+  return path.reduce((acc, key2) => acc?.[key2], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
-  const promises = keys.map((key) => promisesObj[key]);
+  const promises = keys.map((key2) => promisesObj[key2]);
   return Promise.all(promises).then((results) => {
     const resolvedObj = {};
     for (let i = 0; i < keys.length; i++) {
@@ -7458,8 +7458,8 @@ function isPlainObject(o) {
 }
 function numKeys(data) {
   let keyCount = 0;
-  for (const key in data) {
-    if (Object.prototype.hasOwnProperty.call(data, key)) {
+  for (const key2 in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key2)) {
       keyCount++;
     }
   }
@@ -7595,13 +7595,13 @@ var BIGINT_FORMAT_RANGES = {
 function pick(schema, mask) {
   const newShape = {};
   const currDef = schema._zod.def;
-  for (const key in mask) {
-    if (!(key in currDef.shape)) {
-      throw new Error(`Unrecognized key: "${key}"`);
+  for (const key2 in mask) {
+    if (!(key2 in currDef.shape)) {
+      throw new Error(`Unrecognized key: "${key2}"`);
     }
-    if (!mask[key])
+    if (!mask[key2])
       continue;
-    newShape[key] = currDef.shape[key];
+    newShape[key2] = currDef.shape[key2];
   }
   return clone(schema, {
     ...schema._zod.def,
@@ -7612,13 +7612,13 @@ function pick(schema, mask) {
 function omit(schema, mask) {
   const newShape = { ...schema._zod.def.shape };
   const currDef = schema._zod.def;
-  for (const key in mask) {
-    if (!(key in currDef.shape)) {
-      throw new Error(`Unrecognized key: "${key}"`);
+  for (const key2 in mask) {
+    if (!(key2 in currDef.shape)) {
+      throw new Error(`Unrecognized key: "${key2}"`);
     }
-    if (!mask[key])
+    if (!mask[key2])
       continue;
-    delete newShape[key];
+    delete newShape[key2];
   }
   return clone(schema, {
     ...schema._zod.def,
@@ -7659,23 +7659,23 @@ function partial(Class2, schema, mask) {
   const oldShape = schema._zod.def.shape;
   const shape = { ...oldShape };
   if (mask) {
-    for (const key in mask) {
-      if (!(key in oldShape)) {
-        throw new Error(`Unrecognized key: "${key}"`);
+    for (const key2 in mask) {
+      if (!(key2 in oldShape)) {
+        throw new Error(`Unrecognized key: "${key2}"`);
       }
-      if (!mask[key])
+      if (!mask[key2])
         continue;
-      shape[key] = Class2 ? new Class2({
+      shape[key2] = Class2 ? new Class2({
         type: "optional",
-        innerType: oldShape[key]
-      }) : oldShape[key];
+        innerType: oldShape[key2]
+      }) : oldShape[key2];
     }
   } else {
-    for (const key in oldShape) {
-      shape[key] = Class2 ? new Class2({
+    for (const key2 in oldShape) {
+      shape[key2] = Class2 ? new Class2({
         type: "optional",
-        innerType: oldShape[key]
-      }) : oldShape[key];
+        innerType: oldShape[key2]
+      }) : oldShape[key2];
     }
   }
   return clone(schema, {
@@ -7688,22 +7688,22 @@ function required(Class2, schema, mask) {
   const oldShape = schema._zod.def.shape;
   const shape = { ...oldShape };
   if (mask) {
-    for (const key in mask) {
-      if (!(key in shape)) {
-        throw new Error(`Unrecognized key: "${key}"`);
+    for (const key2 in mask) {
+      if (!(key2 in shape)) {
+        throw new Error(`Unrecognized key: "${key2}"`);
       }
-      if (!mask[key])
+      if (!mask[key2])
         continue;
-      shape[key] = new Class2({
+      shape[key2] = new Class2({
         type: "nonoptional",
-        innerType: oldShape[key]
+        innerType: oldShape[key2]
       });
     }
   } else {
-    for (const key in oldShape) {
-      shape[key] = new Class2({
+    for (const key2 in oldShape) {
+      shape[key2] = new Class2({
         type: "nonoptional",
-        innerType: oldShape[key]
+        innerType: oldShape[key2]
       });
     }
   }
@@ -8901,28 +8901,28 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     return payload;
   };
 });
-function handleObjectResult(result, final, key) {
+function handleObjectResult(result, final, key2) {
   if (result.issues.length) {
-    final.issues.push(...prefixIssues(key, result.issues));
+    final.issues.push(...prefixIssues(key2, result.issues));
   }
-  final.value[key] = result.value;
+  final.value[key2] = result.value;
 }
-function handleOptionalObjectResult(result, final, key, input) {
+function handleOptionalObjectResult(result, final, key2, input) {
   if (result.issues.length) {
-    if (input[key] === void 0) {
-      if (key in input) {
-        final.value[key] = void 0;
+    if (input[key2] === void 0) {
+      if (key2 in input) {
+        final.value[key2] = void 0;
       } else {
-        final.value[key] = result.value;
+        final.value[key2] = result.value;
       }
     } else {
-      final.issues.push(...prefixIssues(key, result.issues));
+      final.issues.push(...prefixIssues(key2, result.issues));
     }
   } else if (result.value === void 0) {
-    if (key in input)
-      final.value[key] = void 0;
+    if (key2 in input)
+      final.value[key2] = void 0;
   } else {
-    final.value[key] = result.value;
+    final.value[key2] = result.value;
   }
 }
 var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
@@ -8946,12 +8946,12 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   defineLazy(inst._zod, "propValues", () => {
     const shape = def.shape;
     const propValues = {};
-    for (const key in shape) {
-      const field = shape[key]._zod;
+    for (const key2 in shape) {
+      const field = shape[key2]._zod;
       if (field.values) {
-        propValues[key] ?? (propValues[key] = /* @__PURE__ */ new Set());
+        propValues[key2] ?? (propValues[key2] = /* @__PURE__ */ new Set());
         for (const v of field.values)
-          propValues[key].add(v);
+          propValues[key2].add(v);
       }
     }
     return propValues;
@@ -8959,22 +8959,22 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   const generateFastpass = (shape) => {
     const doc = new Doc(["shape", "payload", "ctx"]);
     const normalized = _normalized.value;
-    const parseStr = (key) => {
-      const k = esc(key);
+    const parseStr = (key2) => {
+      const k = esc(key2);
       return `shape[${k}]._zod.run({ value: input[${k}], issues: [] }, ctx)`;
     };
     doc.write(`const input = payload.value;`);
     const ids = /* @__PURE__ */ Object.create(null);
     let counter = 0;
-    for (const key of normalized.keys) {
-      ids[key] = `key_${counter++}`;
+    for (const key2 of normalized.keys) {
+      ids[key2] = `key_${counter++}`;
     }
     doc.write(`const newResult = {}`);
-    for (const key of normalized.keys) {
-      if (normalized.optionalKeys.has(key)) {
-        const id = ids[key];
-        doc.write(`const ${id} = ${parseStr(key)};`);
-        const k = esc(key);
+    for (const key2 of normalized.keys) {
+      if (normalized.optionalKeys.has(key2)) {
+        const id = ids[key2];
+        doc.write(`const ${id} = ${parseStr(key2)};`);
+        const k = esc(key2);
         doc.write(`
         if (${id}.issues.length) {
           if (input[${k}] === undefined) {
@@ -8996,14 +8996,14 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
         }
         `);
       } else {
-        const id = ids[key];
-        doc.write(`const ${id} = ${parseStr(key)};`);
+        const id = ids[key2];
+        doc.write(`const ${id} = ${parseStr(key2)};`);
         doc.write(`
           if (${id}.issues.length) payload.issues = payload.issues.concat(${id}.issues.map(iss => ({
             ...iss,
-            path: iss.path ? [${esc(key)}, ...iss.path] : [${esc(key)}]
+            path: iss.path ? [${esc(key2)}, ...iss.path] : [${esc(key2)}]
           })));`);
-        doc.write(`newResult[${esc(key)}] = ${id}.value`);
+        doc.write(`newResult[${esc(key2)}] = ${id}.value`);
       }
     }
     doc.write(`payload.value = newResult;`);
@@ -9038,16 +9038,16 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     } else {
       payload.value = {};
       const shape = value.shape;
-      for (const key of value.keys) {
-        const el = shape[key];
-        const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+      for (const key2 of value.keys) {
+        const el = shape[key2];
+        const r = el._zod.run({ value: input[key2], issues: [] }, ctx);
         const isOptional = el._zod.optin === "optional" && el._zod.optout === "optional";
         if (r instanceof Promise) {
-          proms.push(r.then((r2) => isOptional ? handleOptionalObjectResult(r2, payload, key, input) : handleObjectResult(r2, payload, key)));
+          proms.push(r.then((r2) => isOptional ? handleOptionalObjectResult(r2, payload, key2, input) : handleObjectResult(r2, payload, key2)));
         } else if (isOptional) {
-          handleOptionalObjectResult(r, payload, key, input);
+          handleOptionalObjectResult(r, payload, key2, input);
         } else {
-          handleObjectResult(r, payload, key);
+          handleObjectResult(r, payload, key2);
         }
       }
     }
@@ -9058,18 +9058,18 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     const keySet = value.keySet;
     const _catchall = catchall._zod;
     const t = _catchall.def.type;
-    for (const key of Object.keys(input)) {
-      if (keySet.has(key))
+    for (const key2 of Object.keys(input)) {
+      if (keySet.has(key2))
         continue;
       if (t === "never") {
-        unrecognized.push(key);
+        unrecognized.push(key2);
         continue;
       }
-      const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+      const r = _catchall.run({ value: input[key2], issues: [] }, ctx);
       if (r instanceof Promise) {
-        proms.push(r.then((r2) => handleObjectResult(r2, payload, key)));
+        proms.push(r.then((r2) => handleObjectResult(r2, payload, key2)));
       } else {
-        handleObjectResult(r, payload, key);
+        handleObjectResult(r, payload, key2);
       }
     }
     if (unrecognized.length) {
@@ -9231,17 +9231,17 @@ function mergeValues(a, b) {
   }
   if (isPlainObject(a) && isPlainObject(b)) {
     const bKeys = Object.keys(b);
-    const sharedKeys = Object.keys(a).filter((key) => bKeys.indexOf(key) !== -1);
+    const sharedKeys = Object.keys(a).filter((key2) => bKeys.indexOf(key2) !== -1);
     const newObj = { ...a, ...b };
-    for (const key of sharedKeys) {
-      const sharedValue = mergeValues(a[key], b[key]);
+    for (const key2 of sharedKeys) {
+      const sharedValue = mergeValues(a[key2], b[key2]);
       if (!sharedValue.valid) {
         return {
           valid: false,
-          mergeErrorPath: [key, ...sharedValue.mergeErrorPath]
+          mergeErrorPath: [key2, ...sharedValue.mergeErrorPath]
         };
       }
-      newObj[key] = sharedValue.data;
+      newObj[key2] = sharedValue.data;
     }
     return { valid: true, data: newObj };
   }
@@ -9299,29 +9299,29 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
     if (def.keyType._zod.values) {
       const values = def.keyType._zod.values;
       payload.value = {};
-      for (const key of values) {
-        if (typeof key === "string" || typeof key === "number" || typeof key === "symbol") {
-          const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+      for (const key2 of values) {
+        if (typeof key2 === "string" || typeof key2 === "number" || typeof key2 === "symbol") {
+          const result = def.valueType._zod.run({ value: input[key2], issues: [] }, ctx);
           if (result instanceof Promise) {
             proms.push(result.then((result2) => {
               if (result2.issues.length) {
-                payload.issues.push(...prefixIssues(key, result2.issues));
+                payload.issues.push(...prefixIssues(key2, result2.issues));
               }
-              payload.value[key] = result2.value;
+              payload.value[key2] = result2.value;
             }));
           } else {
             if (result.issues.length) {
-              payload.issues.push(...prefixIssues(key, result.issues));
+              payload.issues.push(...prefixIssues(key2, result.issues));
             }
-            payload.value[key] = result.value;
+            payload.value[key2] = result.value;
           }
         }
       }
       let unrecognized;
-      for (const key in input) {
-        if (!values.has(key)) {
+      for (const key2 in input) {
+        if (!values.has(key2)) {
           unrecognized = unrecognized ?? [];
-          unrecognized.push(key);
+          unrecognized.push(key2);
         }
       }
       if (unrecognized && unrecognized.length > 0) {
@@ -9334,10 +9334,10 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
       }
     } else {
       payload.value = {};
-      for (const key of Reflect.ownKeys(input)) {
-        if (key === "__proto__")
+      for (const key2 of Reflect.ownKeys(input)) {
+        if (key2 === "__proto__")
           continue;
-        const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
+        const keyResult = def.keyType._zod.run({ value: key2, issues: [] }, ctx);
         if (keyResult instanceof Promise) {
           throw new Error("Async schemas not supported in object keys currently");
         }
@@ -9346,24 +9346,24 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
             origin: "record",
             code: "invalid_key",
             issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config())),
-            input: key,
-            path: [key],
+            input: key2,
+            path: [key2],
             inst
           });
           payload.value[keyResult.value] = keyResult.value;
           continue;
         }
-        const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+        const result = def.valueType._zod.run({ value: input[key2], issues: [] }, ctx);
         if (result instanceof Promise) {
           proms.push(result.then((result2) => {
             if (result2.issues.length) {
-              payload.issues.push(...prefixIssues(key, result2.issues));
+              payload.issues.push(...prefixIssues(key2, result2.issues));
             }
             payload.value[keyResult.value] = result2.value;
           }));
         } else {
           if (result.issues.length) {
-            payload.issues.push(...prefixIssues(key, result.issues));
+            payload.issues.push(...prefixIssues(key2, result.issues));
           }
           payload.value[keyResult.value] = result.value;
         }
@@ -10418,15 +10418,15 @@ var JSONSchemaGenerator = class {
             json.type = "object";
             json.properties = {};
             const shape = def.shape;
-            for (const key in shape) {
-              json.properties[key] = this.process(shape[key], {
+            for (const key2 in shape) {
+              json.properties[key2] = this.process(shape[key2], {
                 ...params,
-                path: [...params.path, "properties", key]
+                path: [...params.path, "properties", key2]
               });
             }
             const allKeys = new Set(Object.keys(shape));
-            const requiredKeys = new Set([...allKeys].filter((key) => {
-              const v = def.shape[key]._zod;
+            const requiredKeys = new Set([...allKeys].filter((key2) => {
+              const v = def.shape[key2]._zod;
               if (this.io === "input") {
                 return v.optin === void 0;
               } else {
@@ -10760,8 +10760,8 @@ var JSONSchemaGenerator = class {
       if (defId)
         seen.defId = defId;
       const schema2 = seen.schema;
-      for (const key in schema2) {
-        delete schema2[key];
+      for (const key2 in schema2) {
+        delete schema2[key2];
       }
       schema2.$ref = ref;
     };
@@ -10888,8 +10888,8 @@ function toJSONSchema(input, _params) {
       defs
     };
     for (const entry of input._idmap.entries()) {
-      const [key, schema] = entry;
-      schemas[key] = gen2.emit(schema, {
+      const [key2, schema] = entry;
+      schemas[key2] = gen2.emit(schema, {
         ..._params,
         external
       });
@@ -10936,8 +10936,8 @@ function isTransforming(_schema, _ctx) {
       return isTransforming(def.element, ctx);
     }
     case "object": {
-      for (const key in def.shape) {
-        if (isTransforming(def.shape[key], ctx))
+      for (const key2 in def.shape) {
+        if (isTransforming(def.shape[key2], ctx))
           return true;
       }
       return false;
@@ -13488,9 +13488,9 @@ var util;
   };
   util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object3) => {
     const keys = [];
-    for (const key in object3) {
-      if (Object.prototype.hasOwnProperty.call(object3, key)) {
-        keys.push(key);
+    for (const key2 in object3) {
+      if (Object.prototype.hasOwnProperty.call(object3, key2)) {
+        keys.push(key2);
       }
     }
     return keys;
@@ -13890,10 +13890,10 @@ var ParseStatus = class _ParseStatus {
   static async mergeObjectAsync(status, pairs) {
     const syncPairs = [];
     for (const pair of pairs) {
-      const key = await pair.key;
+      const key2 = await pair.key;
       const value = await pair.value;
       syncPairs.push({
-        key,
+        key: key2,
         value
       });
     }
@@ -13902,17 +13902,17 @@ var ParseStatus = class _ParseStatus {
   static mergeObjectSync(status, pairs) {
     const finalObject = {};
     for (const pair of pairs) {
-      const { key, value } = pair;
-      if (key.status === "aborted")
+      const { key: key2, value } = pair;
+      if (key2.status === "aborted")
         return INVALID;
       if (value.status === "aborted")
         return INVALID;
-      if (key.status === "dirty")
+      if (key2.status === "dirty")
         status.dirty();
       if (value.status === "dirty")
         status.dirty();
-      if (key.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
-        finalObject[key.value] = value.value;
+      if (key2.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
+        finalObject[key2.value] = value.value;
       }
     }
     return { status: status.value, value: finalObject };
@@ -13937,12 +13937,12 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path, key) {
+  constructor(parent, value, path, key2) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
     this._path = path;
-    this._key = key;
+    this._key = key2;
   }
   get path() {
     if (!this._cachedPath.length) {
@@ -15687,9 +15687,9 @@ ZodArray2.create = (schema, params) => {
 function deepPartialify(schema) {
   if (schema instanceof ZodObject2) {
     const newShape = {};
-    for (const key in schema.shape) {
-      const fieldSchema = schema.shape[key];
-      newShape[key] = ZodOptional2.create(deepPartialify(fieldSchema));
+    for (const key2 in schema.shape) {
+      const fieldSchema = schema.shape[key2];
+      newShape[key2] = ZodOptional2.create(deepPartialify(fieldSchema));
     }
     return new ZodObject2({
       ...schema._def,
@@ -15740,29 +15740,29 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
     const { shape, keys: shapeKeys } = this._getCached();
     const extraKeys = [];
     if (!(this._def.catchall instanceof ZodNever2 && this._def.unknownKeys === "strip")) {
-      for (const key in ctx.data) {
-        if (!shapeKeys.includes(key)) {
-          extraKeys.push(key);
+      for (const key2 in ctx.data) {
+        if (!shapeKeys.includes(key2)) {
+          extraKeys.push(key2);
         }
       }
     }
     const pairs = [];
-    for (const key of shapeKeys) {
-      const keyValidator = shape[key];
-      const value = ctx.data[key];
+    for (const key2 of shapeKeys) {
+      const keyValidator = shape[key2];
+      const value = ctx.data[key2];
       pairs.push({
-        key: { status: "valid", value: key },
-        value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key)),
-        alwaysSet: key in ctx.data
+        key: { status: "valid", value: key2 },
+        value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key2)),
+        alwaysSet: key2 in ctx.data
       });
     }
     if (this._def.catchall instanceof ZodNever2) {
       const unknownKeys = this._def.unknownKeys;
       if (unknownKeys === "passthrough") {
-        for (const key of extraKeys) {
+        for (const key2 of extraKeys) {
           pairs.push({
-            key: { status: "valid", value: key },
-            value: { status: "valid", value: ctx.data[key] }
+            key: { status: "valid", value: key2 },
+            value: { status: "valid", value: ctx.data[key2] }
           });
         }
       } else if (unknownKeys === "strict") {
@@ -15779,15 +15779,15 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
       }
     } else {
       const catchall = this._def.catchall;
-      for (const key of extraKeys) {
-        const value = ctx.data[key];
+      for (const key2 of extraKeys) {
+        const value = ctx.data[key2];
         pairs.push({
-          key: { status: "valid", value: key },
+          key: { status: "valid", value: key2 },
           value: catchall._parse(
-            new ParseInputLazyPath(ctx, value, ctx.path, key)
+            new ParseInputLazyPath(ctx, value, ctx.path, key2)
             //, ctx.child(key), value, getParsedType(value)
           ),
-          alwaysSet: key in ctx.data
+          alwaysSet: key2 in ctx.data
         });
       }
     }
@@ -15795,10 +15795,10 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
       return Promise.resolve().then(async () => {
         const syncPairs = [];
         for (const pair of pairs) {
-          const key = await pair.key;
+          const key2 = await pair.key;
           const value = await pair.value;
           syncPairs.push({
-            key,
+            key: key2,
             value,
             alwaysSet: pair.alwaysSet
           });
@@ -15923,8 +15923,8 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
   //   }) as any;
   //   return merged;
   // }
-  setKey(key, schema) {
-    return this.augment({ [key]: schema });
+  setKey(key2, schema) {
+    return this.augment({ [key2]: schema });
   }
   // merge<Incoming extends AnyZodObject>(
   //   merging: Incoming
@@ -15955,9 +15955,9 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
   }
   pick(mask) {
     const shape = {};
-    for (const key of util.objectKeys(mask)) {
-      if (mask[key] && this.shape[key]) {
-        shape[key] = this.shape[key];
+    for (const key2 of util.objectKeys(mask)) {
+      if (mask[key2] && this.shape[key2]) {
+        shape[key2] = this.shape[key2];
       }
     }
     return new _ZodObject({
@@ -15967,9 +15967,9 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
   }
   omit(mask) {
     const shape = {};
-    for (const key of util.objectKeys(this.shape)) {
-      if (!mask[key]) {
-        shape[key] = this.shape[key];
+    for (const key2 of util.objectKeys(this.shape)) {
+      if (!mask[key2]) {
+        shape[key2] = this.shape[key2];
       }
     }
     return new _ZodObject({
@@ -15985,12 +15985,12 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
   }
   partial(mask) {
     const newShape = {};
-    for (const key of util.objectKeys(this.shape)) {
-      const fieldSchema = this.shape[key];
-      if (mask && !mask[key]) {
-        newShape[key] = fieldSchema;
+    for (const key2 of util.objectKeys(this.shape)) {
+      const fieldSchema = this.shape[key2];
+      if (mask && !mask[key2]) {
+        newShape[key2] = fieldSchema;
       } else {
-        newShape[key] = fieldSchema.optional();
+        newShape[key2] = fieldSchema.optional();
       }
     }
     return new _ZodObject({
@@ -16000,16 +16000,16 @@ var ZodObject2 = class _ZodObject extends ZodType2 {
   }
   required(mask) {
     const newShape = {};
-    for (const key of util.objectKeys(this.shape)) {
-      if (mask && !mask[key]) {
-        newShape[key] = this.shape[key];
+    for (const key2 of util.objectKeys(this.shape)) {
+      if (mask && !mask[key2]) {
+        newShape[key2] = this.shape[key2];
       } else {
-        const fieldSchema = this.shape[key];
+        const fieldSchema = this.shape[key2];
         let newField = fieldSchema;
         while (newField instanceof ZodOptional2) {
           newField = newField._def.innerType;
         }
-        newShape[key] = newField;
+        newShape[key2] = newField;
       }
     }
     return new _ZodObject({
@@ -16253,14 +16253,14 @@ function mergeValues2(a, b) {
     return { valid: true, data: a };
   } else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
     const bKeys = util.objectKeys(b);
-    const sharedKeys = util.objectKeys(a).filter((key) => bKeys.indexOf(key) !== -1);
+    const sharedKeys = util.objectKeys(a).filter((key2) => bKeys.indexOf(key2) !== -1);
     const newObj = { ...a, ...b };
-    for (const key of sharedKeys) {
-      const sharedValue = mergeValues2(a[key], b[key]);
+    for (const key2 of sharedKeys) {
+      const sharedValue = mergeValues2(a[key2], b[key2]);
       if (!sharedValue.valid) {
         return { valid: false };
       }
-      newObj[key] = sharedValue.data;
+      newObj[key2] = sharedValue.data;
     }
     return { valid: true, data: newObj };
   } else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
@@ -16424,11 +16424,11 @@ var ZodRecord2 = class _ZodRecord extends ZodType2 {
     const pairs = [];
     const keyType = this._def.keyType;
     const valueType = this._def.valueType;
-    for (const key in ctx.data) {
+    for (const key2 in ctx.data) {
       pairs.push({
-        key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, key)),
-        value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key], ctx.path, key)),
-        alwaysSet: key in ctx.data
+        key: keyType._parse(new ParseInputLazyPath(ctx, key2, ctx.path, key2)),
+        value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key2], ctx.path, key2)),
+        alwaysSet: key2 in ctx.data
       });
     }
     if (ctx.common.async) {
@@ -16476,9 +16476,9 @@ var ZodMap = class extends ZodType2 {
     }
     const keyType = this._def.keyType;
     const valueType = this._def.valueType;
-    const pairs = [...ctx.data.entries()].map(([key, value], index) => {
+    const pairs = [...ctx.data.entries()].map(([key2, value], index) => {
       return {
-        key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, [index, "key"])),
+        key: keyType._parse(new ParseInputLazyPath(ctx, key2, ctx.path, [index, "key"])),
         value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"]))
       };
     });
@@ -16486,30 +16486,30 @@ var ZodMap = class extends ZodType2 {
       const finalMap = /* @__PURE__ */ new Map();
       return Promise.resolve().then(async () => {
         for (const pair of pairs) {
-          const key = await pair.key;
+          const key2 = await pair.key;
           const value = await pair.value;
-          if (key.status === "aborted" || value.status === "aborted") {
+          if (key2.status === "aborted" || value.status === "aborted") {
             return INVALID;
           }
-          if (key.status === "dirty" || value.status === "dirty") {
+          if (key2.status === "dirty" || value.status === "dirty") {
             status.dirty();
           }
-          finalMap.set(key.value, value.value);
+          finalMap.set(key2.value, value.value);
         }
         return { status: status.value, value: finalMap };
       });
     } else {
       const finalMap = /* @__PURE__ */ new Map();
       for (const pair of pairs) {
-        const key = pair.key;
+        const key2 = pair.key;
         const value = pair.value;
-        if (key.status === "aborted" || value.status === "aborted") {
+        if (key2.status === "aborted" || value.status === "aborted") {
           return INVALID;
         }
-        if (key.status === "dirty" || value.status === "dirty") {
+        if (key2.status === "dirty" || value.status === "dirty") {
           status.dirty();
         }
-        finalMap.set(key.value, value.value);
+        finalMap.set(key2.value, value.value);
       }
       return { status: status.value, value: finalMap };
     }
@@ -17650,19 +17650,19 @@ var getRefs = (options) => {
 };
 
 // node_modules/zod-to-json-schema/dist/esm/errorMessages.js
-function addErrorMessage(res, key, errorMessage, refs) {
+function addErrorMessage(res, key2, errorMessage, refs) {
   if (!refs?.errorMessages)
     return;
   if (errorMessage) {
     res.errorMessage = {
       ...res.errorMessage,
-      [key]: errorMessage
+      [key2]: errorMessage
     };
   }
 }
-function setResponseValueAndErrors(res, key, value, errorMessage, refs) {
-  res[key] = value;
-  addErrorMessage(res, key, errorMessage, refs);
+function setResponseValueAndErrors(res, key2, value, errorMessage, refs) {
+  res[key2] = value;
+  addErrorMessage(res, key2, errorMessage, refs);
 }
 
 // node_modules/zod-to-json-schema/dist/esm/getRelativePath.js
@@ -18254,11 +18254,11 @@ function parseRecordDef(def, refs) {
     return {
       type: "object",
       required: def.keyType._def.values,
-      properties: def.keyType._def.values.reduce((acc, key) => ({
+      properties: def.keyType._def.values.reduce((acc, key2) => ({
         ...acc,
-        [key]: parseDef(def.valueType._def, {
+        [key2]: parseDef(def.valueType._def, {
           ...refs,
-          currentPath: [...refs.currentPath, "properties", key]
+          currentPath: [...refs.currentPath, "properties", key2]
         }) ?? parseAnyDef(refs)
       }), {}),
       additionalProperties: refs.rejectedAdditionalProperties
@@ -18325,10 +18325,10 @@ function parseMapDef(def, refs) {
 // node_modules/zod-to-json-schema/dist/esm/parsers/nativeEnum.js
 function parseNativeEnumDef(def) {
   const object3 = def.values;
-  const actualKeys = Object.keys(def.values).filter((key) => {
-    return typeof object3[object3[key]] !== "number";
+  const actualKeys = Object.keys(def.values).filter((key2) => {
+    return typeof object3[object3[key2]] !== "number";
   });
-  const actualValues = actualKeys.map((key) => object3[key]);
+  const actualValues = actualKeys.map((key2) => object3[key2]);
   const parsedTypes = Array.from(new Set(actualValues.map((values) => typeof values)));
   return {
     type: parsedTypes.length === 1 ? parsedTypes[0] === "string" ? "string" : "number" : ["string", "number"],
@@ -19859,8 +19859,8 @@ function isPlainObject2(value) {
 }
 function mergeCapabilities(base, additional) {
   const result = { ...base };
-  for (const key in additional) {
-    const k = key;
+  for (const key2 in additional) {
+    const k = key2;
     const addValue = additional[k];
     if (addValue === void 0)
       continue;
@@ -21440,11 +21440,14 @@ var EMPTY_COMPLETION_RESULT = {
   }
 };
 
+// src/api.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+
 // src/config.ts
 import { homedir } from "node:os";
 import { join } from "node:path";
 var SERVER_NAME = "sc2-mcp";
-var SERVER_VERSION = "0.9.0";
+var SERVER_VERSION = "0.10.0";
 function apiBase() {
   const raw = process.env.SC2_API_BASE?.trim() || "https://www.starcraft2.ai";
   return raw.replace(/\/+$/, "");
@@ -21504,6 +21507,10 @@ async function forgetToken() {
 }
 
 // src/api.ts
+var hostedStore = new AsyncLocalStorage();
+function hosted() {
+  return hostedStore.getStore();
+}
 var ApiError = class extends Error {
   constructor(status, code, message, body = {}) {
     super(message);
@@ -21522,6 +21529,8 @@ var NotSignedInError = class extends Error {
 };
 async function request(path, opts = {}) {
   const headers = { "User-Agent": USER_AGENT, Accept: "application/json", ...opts.headers };
+  const ctx = hosted();
+  if (ctx) return ctx.transport(path, { method: opts.method ?? "GET", body: opts.body, headers, signal: opts.signal });
   if (opts.auth !== false) {
     const tok = await currentToken();
     if (!tok) throw new NotSignedInError();
@@ -21539,7 +21548,8 @@ async function errorFrom(res) {
   const message = typeof body.error === "string" && body.error || typeof body.error_description === "string" && body.error_description || `HTTP ${res.status}${text2 && text2.length < 200 ? `: ${text2}` : ""}`;
   const code = typeof body.code === "string" ? body.code : typeof body.error === "string" && /^[a-z_]+$/.test(body.error) ? body.error : null;
   if (res.status === 401) {
-    return new ApiError(401, code ?? "NOT_AUTHED", "Your StarCraft2.ai sign-in is missing, expired or revoked. Call `login` to sign in again.", body);
+    const how = hosted() ? "Reconnect StarCraft2.ai from the app's connector settings." : "Call `login` to sign in again.";
+    return new ApiError(401, code ?? "NOT_AUTHED", `Your StarCraft2.ai sign-in is missing, expired or revoked. ${how}`, body);
   }
   return new ApiError(res.status, code, message, body);
 }
@@ -21558,8 +21568,8 @@ async function postJson(path, payload, opts = {}) {
   if (!res.ok) throw await errorFrom(res);
   return await res.json();
 }
-function getReplay(key) {
-  return getJson(`/api/mcp/replay?id=${encodeURIComponent(key)}`);
+function getReplay(key2) {
+  return getJson(`/api/mcp/replay?id=${encodeURIComponent(key2)}`);
 }
 
 // src/format.ts
@@ -21798,8 +21808,11 @@ async function startDeviceLogin(flow, settle) {
 // src/runs.ts
 var runs = /* @__PURE__ */ new Map();
 var TYPICAL_REASONING_CHARS = 85e3;
+function key(replayId) {
+  return `${hosted()?.principal ?? ""}:${replayId}`;
+}
 function getRun(replayId) {
-  return runs.get(replayId);
+  return runs.get(key(replayId));
 }
 function progressFraction(run) {
   if (run.settled) return 1;
@@ -21807,7 +21820,7 @@ function progressFraction(run) {
   return Math.min(0.88, run.reasoningChars / TYPICAL_REASONING_CHARS * 0.88);
 }
 function startRun(replayId, body) {
-  const existing = runs.get(replayId);
+  const existing = runs.get(key(replayId));
   if (existing && !existing.settled) return existing;
   const run = {
     replayId,
@@ -21844,7 +21857,8 @@ function startRun(replayId, body) {
       run.settled = true;
     }
   })();
-  runs.set(replayId, run);
+  runs.set(key(replayId), run);
+  hosted()?.keepAlive(run.done);
   return run;
 }
 async function readFinalFrame(res, run) {
@@ -21890,10 +21904,10 @@ async function waitForRun(run, ms, onTick, signal) {
 // src/progress-note.ts
 var runs2 = /* @__PURE__ */ new Map();
 function noteKey(region, name, category) {
-  return `${region}/${name.toLowerCase()}/${category}`;
+  return `${hosted()?.principal ?? ""}:${region}/${name.toLowerCase()}/${category}`;
 }
-function getNoteRun(key) {
-  return runs2.get(key);
+function getNoteRun(key2) {
+  return runs2.get(key2);
 }
 function getNote(region, name, category, signal) {
   const q = new URLSearchParams({ region, name, category });
@@ -21904,10 +21918,10 @@ function getNote(region, name, category, signal) {
   })();
 }
 function startNoteRun(args) {
-  const key = noteKey(args.region, args.name, args.category);
-  const existing = runs2.get(key);
+  const key2 = noteKey(args.region, args.name, args.category);
+  const existing = runs2.get(key2);
   if (existing && !existing.settled) return existing;
-  const run = { key, startedAt: Date.now(), done: Promise.resolve(), settled: false, note: null, error: null, delivered: false };
+  const run = { key: key2, startedAt: Date.now(), done: Promise.resolve(), settled: false, note: null, error: null, delivered: false };
   run.done = (async () => {
     try {
       const res = await request("/api/profile-coach", {
@@ -21940,7 +21954,8 @@ function startNoteRun(args) {
       run.settled = true;
     }
   })();
-  runs2.set(key, run);
+  runs2.set(key2, run);
+  hosted()?.keepAlive(run.done);
   return run;
 }
 async function readFinal(res) {
@@ -21994,6 +22009,7 @@ var COACH_PRICE = 1;
 var CONFIRM_DESCRIPTION = "Set to true ONLY after the user has explicitly agreed, in this conversation, to spend 1 mineral on this. Never set it on your own initiative.";
 async function confirmSpend(server, flag, question) {
   if (flag !== true) return "needs_flag";
+  if (hosted()) return "ok";
   if (!server.server.getClientCapabilities()?.elicitation) return "ok";
   try {
     const res = await server.server.elicitInput({
@@ -22097,7 +22113,8 @@ async function loadReplayBytes(args, signal) {
     chunks.push(value);
   }
   const bytes = Buffer.concat(chunks);
-  const name = decodeURIComponent(url.pathname.split("/").pop() || "replay.SC2Replay");
+  let name = args.name || decodeURIComponent(url.pathname.split("/").pop() || "replay.SC2Replay");
+  if (!/\.(sc2replay|rep)$/i.test(name)) name = bytes.subarray(0, 3).toString("latin1") === "MPQ" ? "replay.SC2Replay" : name;
   return { bytes, filename: name };
 }
 function multipart(field, filename, bytes) {
@@ -22187,14 +22204,17 @@ async function readChatStream(res) {
   if (!answer.trim() && streamError) throw new Error(streamError);
   return answer.trim();
 }
-function createServer2() {
+function createServer2(opts = {}) {
+  const isHosted = opts.hosted === true;
+  const WAIT_DEFAULT = isHosted ? 40 : 50;
+  const waitMs = (seconds) => Math.min(seconds ?? WAIT_DEFAULT, isHosted ? 45 : 600) * 1e3;
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "StarCraft II AI Coach (StarCraft2.ai)" },
     {
-      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June', 'games I played with Sirry where I went mass Liberators') use `search_replays` \u2014 it filters by teammates and by units built in one call, so never open games one by one to check a build. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. When the user asks whether they're improving, what they keep doing wrong across games, or what to work on, use `coach_my_progress` (the saved check-in note is free; a new one costs 1 mineral). Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
+      instructions: "Tools for StarCraft2.ai, a StarCraft II replay analyzer with an AI Coach. " + (isHosted ? "The user is signed in through this app's StarCraft2.ai connector; if a tool says the sign-in expired, ask them to reconnect it in the app's connector settings. " : "Every tool except `login` and `upload_replay` needs the user to be signed in; if a tool says they aren't, call `login`. ") + "Minerals are the site's paid credits: running the AI Coach on a replay costs 1 mineral, and follow-up questions about a replay are free for the first 3 then 1 mineral per 20 more. Tools that spend minerals refuse unless `confirm_spend` is true \u2014 ask the user first and only set it after they agree. When the user mentions one of their games ('my last game'), call `list_my_replays` first; to narrow by date, map, opponent, race or result ('my losses on Rainfall in June', 'games I played with Sirry where I went mass Liberators') use `search_replays` \u2014 it filters by teammates and by units built in one call, so never open games one by one to check a build. Games they played, coached or uploaded before are already there, and an existing report is free to re-read. When the user asks whether they're improving, what they keep doing wrong across games, or what to work on, use `coach_my_progress` (the saved check-in note is free; a new one costs 1 mineral). Knowledge search, uploads and reading existing reports are free. For general StarCraft II questions, use `search_sc2_knowledge` and answer from the passages it returns, citing their URLs."
     }
   );
-  server.registerTool(
+  if (!isHosted) server.registerTool(
     "login",
     {
       title: "Sign in to StarCraft2.ai",
@@ -22248,7 +22268,7 @@ Once they say they've approved, call login again (or any other tool) to continue
       return text(`Signed in to StarCraft2.ai. Mineral balance: ${me.minerals}.`, { status: "signed_in", minerals: me.minerals });
     })
   );
-  server.registerTool(
+  if (!isHosted) server.registerTool(
     "logout",
     {
       title: "Sign out",
@@ -22324,17 +22344,30 @@ ${r.content}`).join("\n\n");
     "upload_replay",
     {
       title: "Upload a replay",
-      description: "Upload a StarCraft II replay (.SC2Replay) \u2014 or a Brood War .rep \u2014 to StarCraft2.ai from a local file path or a download URL. Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\\u2026\\Replays\\Multiplayer; on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/\u2026/Replays/Multiplayer.",
-      inputSchema: {
+      description: isHosted ? "Upload a StarCraft II replay (.SC2Replay) \u2014 or a Brood War .rep \u2014 to StarCraft2.ai: a file the user attached to the chat (`file`), or a download link (`url`). Returns the replay id and page, and whether an AI Coach report already exists. Free. If the user can't attach files here, suggest the free auto-uploader (starcraft2.ai/en/uploader), which uploads every game they play." : "Upload a StarCraft II replay (.SC2Replay) \u2014 or a Brood War .rep \u2014 to StarCraft2.ai from a local file path or a download URL. Works without signing in (the upload is then anonymous); when signed in it is attributed to the user. Returns the replay id and page, and when signed in whether an AI Coach report already exists. Free. On Windows the default replay folder is Documents\\StarCraft II\\Accounts\\\u2026\\Replays\\Multiplayer; on macOS ~/Library/Application Support/Blizzard/StarCraft II/Accounts/\u2026/Replays/Multiplayer.",
+      inputSchema: isHosted ? {
+        // ChatGPT fills a parameter listed in openai/fileParams with the
+        // attached file: a short-lived download_url plus ids.
+        file: external_exports.object({
+          download_url: external_exports.string().url(),
+          file_id: external_exports.string(),
+          mime_type: external_exports.string().optional(),
+          file_name: external_exports.string().optional()
+        }).strict().optional().describe("The replay file the user attached to the chat."),
+        url: external_exports.string().url().optional().describe("http(s) URL the replay file can be downloaded from.")
+      } : {
         path: external_exports.string().min(1).optional().describe("Local path to the replay file (~ is expanded)."),
         url: external_exports.string().url().optional().describe("http(s) URL the replay file can be downloaded from.")
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      ...isHosted ? { _meta: { "openai/fileParams": ["file"] } } : {}
     },
     guarded(async (args, extra) => {
-      if (!!args.path === !!args.url) return fail("Give exactly one of `path` or `url`.");
-      const signedIn = !!await currentToken();
-      const { bytes, filename } = await loadReplayBytes(args, extra.signal);
+      const source = args.file ? { url: args.file.download_url, name: args.file.file_name } : args.path && !isHosted ? { path: args.path } : args.url ? { url: args.url } : null;
+      const given = [args.file, args.path, args.url].filter(Boolean).length;
+      if (!source || given !== 1) return fail(isHosted ? "Give exactly one of `file` or `url`." : "Give exactly one of `path` or `url`.");
+      const signedIn = isHosted || !!await currentToken();
+      const { bytes, filename } = await loadReplayBytes(source, extra.signal);
       const isBw = filename.toLowerCase().endsWith(".rep");
       if (!isBw && !(bytes.length >= 64 && bytes.subarray(0, 3).toString("latin1") === "MPQ")) {
         return fail(`${filename} isn't a StarCraft II replay (expected an .SC2Replay file).`);
@@ -22457,7 +22490,7 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
       description: "Read a replay's details and its AI Coach report if one exists. If this session started a coach run that is still going, waits for it (up to wait_seconds) and returns the report when it lands. Free \u2014 never spends minerals.",
       inputSchema: {
         replay: replayArg,
-        wait_seconds: external_exports.number().int().min(0).max(600).optional().describe("Max seconds to wait for an in-progress run (default 50).")
+        wait_seconds: external_exports.number().int().min(0).max(600).optional().describe(`Max seconds to wait for an in-progress run (default ${WAIT_DEFAULT}).`)
       },
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
@@ -22466,11 +22499,17 @@ ${replays.map((r) => replayLine(r, me)).join("\n")}${claimHint}`, {
       const run = getRun(summary.id);
       if (run && !run.analysis && !run.error) {
         const report = progressReporter(extra);
-        const settled = await waitForRun(run, (wait_seconds ?? 50) * 1e3, (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
+        const settled = await waitForRun(run, waitMs(wait_seconds), (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
         if (!settled) return text(runStatusText(run, summary), { status: "running", replayId: summary.id });
         return runResult(run, summary);
       }
       if (run?.analysis || run?.error) return runResult(run, summary);
+      if (!summary.analysis && summary.coachInProgress) {
+        return text(
+          `The AI Coach is still analyzing ${summary.map ?? "this replay"}. Runs take 3\u20137 minutes; call get_analysis again in a minute. No further minerals are needed.`,
+          { status: "running", replayId: summary.id }
+        );
+      }
       if (!summary.analysis) {
         return text(`${formatReplayHeader(summary)}
 
@@ -22500,7 +22539,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
         confirm_spend: external_exports.boolean().optional().describe(CONFIRM_DESCRIPTION),
         language: external_exports.enum(COACH_LANGUAGES).optional().describe("Report language (default en)."),
         upgrade: external_exports.boolean().optional().describe("Re-run an existing report that was made with an older coach version. Free; only works when the report is outdated."),
-        wait_seconds: external_exports.number().int().min(0).max(600).optional().describe("Max seconds to wait before returning (default 50).")
+        wait_seconds: external_exports.number().int().min(0).max(600).optional().describe(`Max seconds to wait before returning (default ${WAIT_DEFAULT}).`)
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
     },
@@ -22520,6 +22559,12 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
 
 (Older coach version; pass upgrade: true to re-run it on the current version for free.)` : ""),
               { replayId: summary.id, spent: 0, analysis: summary.analysis }
+            );
+          }
+          if (!summary.analysis && summary.coachInProgress) {
+            return text(
+              `The AI Coach is already analyzing ${summary.map ?? "this replay"} (started earlier). Call get_analysis in a minute to collect the report; nothing more is charged.`,
+              { status: "running", replayId: summary.id }
             );
           }
           if (upgrade && summary.analysis && outdated) {
@@ -22546,7 +22591,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
           }
         }
         const report = progressReporter(extra);
-        const settled = await waitForRun(run, (wait_seconds ?? 50) * 1e3, (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
+        const settled = await waitForRun(run, waitMs(wait_seconds), (r) => report(`AI Coach ${r.phase}, ~${Math.round(progressFraction(r) * 100)}%`), extra.signal);
         if (!settled) return text(runStatusText(run, summary), { status: "running", replayId: summary.id });
         return runResult(run, summary);
       }
@@ -22647,7 +22692,7 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
         refresh: external_exports.boolean().optional().describe("Write a new note instead of returning the saved one."),
         confirm_spend: external_exports.boolean().optional().describe(CONFIRM_DESCRIPTION),
         language: external_exports.enum(COACH_LANGUAGES).optional().describe("Language of a new note (default en)."),
-        wait_seconds: external_exports.number().int().min(0).max(300).optional().describe("Max seconds to wait for a new note before returning (default 50).")
+        wait_seconds: external_exports.number().int().min(0).max(300).optional().describe(`Max seconds to wait for a new note before returning (default ${WAIT_DEFAULT}).`)
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
     },
@@ -22678,8 +22723,8 @@ ${formatAnalysis(summary.analysis)}` + (outdated ? `
             note = unranked;
           }
         }
-        const key = noteKey(region, name, category);
-        let run = getNoteRun(key);
+        const key2 = noteKey(region, name, category);
+        let run = getNoteRun(key2);
         if (run && run.settled && !run.delivered) {
         } else if (!run || run.settled) {
           const fresh = note.summary && !note.hasNewGames && !note.summaryNeedsRefresh;
@@ -22724,7 +22769,7 @@ On the site: ${profileUrl(category)}`, {
           run = startNoteRun({ region, name, category, language: args.language ?? "en", free });
         }
         const report = progressReporter(extra);
-        const settled = await waitForNote(run, (args.wait_seconds ?? 50) * 1e3, (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
+        const settled = await waitForNote(run, waitMs(args.wait_seconds), (s) => report(`Writing the check-in note, ${s}s`), extra.signal);
         if (!settled) {
           return text(
             `Still writing the check-in note (${Math.round((Date.now() - run.startedAt) / 1e3)}s so far; it usually takes 1\u20132 minutes). Call coach_my_progress again with the same player and category to collect it \u2014 don't pass refresh again.`,

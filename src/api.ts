@@ -1,5 +1,29 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { apiBase, USER_AGENT } from "./config.js";
 import { currentToken } from "./credentials.js";
+
+/**
+ * Hosted mode: StarCraft2.ai runs these same tools behind its connector
+ * endpoint (https://www.starcraft2.ai/api/mcp) for Claude and ChatGPT. Each
+ * request then carries a context: the site answers API calls in-process
+ * (already signed in as the connector's user), keeps a started coach run
+ * alive after the tool returns, and names the caller so in-memory run maps
+ * never mix two users.
+ */
+export interface HostedContext {
+  transport: (path: string, init: { method: string; body?: BodyInit; headers: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
+  keepAlive: (work: Promise<unknown>) => void;
+  principal: string;
+}
+const hostedStore = new AsyncLocalStorage<HostedContext>();
+
+export function runHosted<T>(ctx: HostedContext, fn: () => T): T {
+  return hostedStore.run(ctx, fn);
+}
+
+export function hosted(): HostedContext | undefined {
+  return hostedStore.getStore();
+}
 
 /** An HTTP error from the site, carrying its machine-readable `code`. */
 export class ApiError extends Error {
@@ -30,6 +54,8 @@ export interface RequestOptions {
 
 export async function request(path: string, opts: RequestOptions = {}): Promise<Response> {
   const headers: Record<string, string> = { "User-Agent": USER_AGENT, Accept: "application/json", ...opts.headers };
+  const ctx = hosted();
+  if (ctx) return ctx.transport(path, { method: opts.method ?? "GET", body: opts.body, headers, signal: opts.signal });
   if (opts.auth !== false) {
     const tok = await currentToken();
     if (!tok) throw new NotSignedInError();
@@ -53,7 +79,10 @@ export async function errorFrom(res: Response): Promise<ApiError> {
     `HTTP ${res.status}${text && text.length < 200 ? `: ${text}` : ""}`;
   const code = typeof body.code === "string" ? body.code : typeof body.error === "string" && /^[a-z_]+$/.test(body.error) ? body.error : null;
   if (res.status === 401) {
-    return new ApiError(401, code ?? "NOT_AUTHED", "Your StarCraft2.ai sign-in is missing, expired or revoked. Call `login` to sign in again.", body);
+    const how = hosted()
+      ? "Reconnect StarCraft2.ai from the app's connector settings."
+      : "Call `login` to sign in again.";
+    return new ApiError(401, code ?? "NOT_AUTHED", `Your StarCraft2.ai sign-in is missing, expired or revoked. ${how}`, body);
   }
   return new ApiError(res.status, code, message, body);
 }
@@ -110,6 +139,8 @@ export interface ReplaySummary {
   analysisOutdated?: boolean;
   analysis?: AiAnalysis | null;
   analysisLanguage?: string | null;
+  /** An AI Coach run is going on the site right now (someone started it). */
+  coachInProgress?: boolean;
 }
 
 export type ReplayRelation = "played" | "coached" | "asked" | "uploaded";

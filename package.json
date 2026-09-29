@@ -1,6 +1,6 @@
 {
   "name": "sc2-mcp",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "MCP server for StarCraft2.ai: ask StarCraft II questions, upload replays, run the AI Coach and ask follow-up questions from any MCP client.",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,7 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\" --legal-comments=none",
+    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\" --legal-comments=none && esbuild src/lib.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/lib.js --external:@modelcontextprotocol/sdk --legal-comments=none && cp src/lib.d.ts dist/lib.d.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/protocol.test.mjs",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
@@ -39,5 +39,12 @@
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "zod": "^3.25.76"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "default": "./dist/lib.js"
+    }
   }
 }
