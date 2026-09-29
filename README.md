@@ -49,18 +49,22 @@ claude mcp add sc2 -- node ~/sc2-mcp/dist/index.js
 
 ### Claude Desktop, Cursor and other clients
 
-Clone the repo, then add this to the client's MCP config (for Claude Desktop, `claude_desktop_config.json`):
+Nothing to download: the config runs the server straight from this repo with `npx`. In Claude Desktop, open **Claude → Settings… → Developer → Edit Config**, replace the contents of `claude_desktop_config.json` with this (or add the `sc2` entry to your existing `mcpServers`), save, and quit and reopen Claude:
 
 ```json
 {
   "mcpServers": {
     "sc2": {
-      "command": "node",
-      "args": ["/absolute/path/to/sc2-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "github:tomkit/sc2-mcp"]
     }
   }
 }
 ```
+
+Then check **+ → Connectors → Manage connectors** lists `sc2`, and ask Claude to sign you in to StarCraft2.ai. Step-by-step instructions with screenshots: [starcraft2.ai/en/mcp](https://www.starcraft2.ai/en/mcp#claude-desktop). A local clone works too: `"command": "node", "args": ["/absolute/path/to/sc2-mcp/dist/index.js"]`.
+
+The claude.ai and chatgpt.com websites can't add it as a connector yet: they need a server hosted at a web address, and this one runs on your computer. With a ChatGPT plan, use it through Codex (above).
 
 It needs Node.js 18.17 or newer on your `PATH`, including for the Claude Code and Codex plugins (neither installer brings Node with it). `dist/index.js` is a self-contained bundle, so there is nothing to `npm install`.
 
